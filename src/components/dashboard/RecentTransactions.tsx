@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatShortDate } from "@/lib/utils";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, Transaction } from "@/types";
-import { ArrowUpLeft, ArrowDownRight, ChevronRight } from "lucide-react";
+import { ArrowUpLeft, ArrowUpRight, ArrowDownRight, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 

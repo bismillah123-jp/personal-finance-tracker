@@ -1,43 +1,33 @@
 "use client";
 
-import * as React from "react";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
 
 interface AppShellProps {
   children: React.ReactNode;
-  title?: string;
-  subtitle?: string;
-  onAddTransaction?: () => void;
 }
 
-export function AppShell({ children, title, subtitle, onAddTransaction }: AppShellProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(false);
-
+export function AppShell({ children }: AppShellProps) {
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="min-h-screen bg-background">
       {/* Desktop Sidebar */}
-      <div className="hidden md:block">
-        <Sidebar collapsed={sidebarCollapsed} />
-      </div>
-
-      {/* Main Content */}
-      <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
-        {title && (
-          <Header
-            title={title}
-            subtitle={subtitle}
-            onAddTransaction={onAddTransaction}
-          />
-        )}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
-          {children}
-        </main>
+      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex">
+        <Sidebar />
       </div>
 
       {/* Mobile Bottom Nav */}
-      <MobileNav />
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50">
+        <MobileNav />
+      </div>
+
+      {/* Main Content */}
+      <div className="lg:pl-64 pb-20 lg:pb-0">
+        <Header />
+        <main className="p-4 lg:p-6">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

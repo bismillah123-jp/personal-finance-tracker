@@ -1,45 +1,44 @@
 "use client";
 
-import * as React from "react";
-import { Bell, Plus } from "lucide-react";
+import { Bell, Plus, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
+import { useAuth } from "@/components/providers";
 
-interface HeaderProps {
-  title: string;
-  subtitle?: string;
-  onAddTransaction?: () => void;
-}
+export function Header() {
+  const { profile } = useAuth();
 
-export function Header({ title, subtitle, onAddTransaction }: HeaderProps) {
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map(n => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-md border-b border-border">
-      <div className="flex items-center justify-between px-6 py-4">
-        <div>
-          <h1 className="text-xl font-bold text-foreground">{title}</h1>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
-          )}
+      <div className="flex items-center justify-between px-4 lg:px-6 py-3">
+        {/* Mobile Logo */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+            <span className="text-white text-xs font-extrabold">FD</span>
+          </div>
+          <span className="text-lg font-bold">Fintrack</span>
         </div>
+
+        {/* Desktop - hidden on mobile */}
+        <div className="hidden lg:block" />
+
         <div className="flex items-center gap-2">
-          {onAddTransaction && (
-            <Button
-              onClick={onAddTransaction}
-              size="sm"
-              className="gap-2 shadow-sm"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">Catat Transaksi</span>
-            </Button>
-          )}
           <ThemeToggle />
           <Button variant="ghost" size="icon" className="rounded-xl relative">
             <Bell className="w-5 h-5" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full" />
           </Button>
-          {/* Avatar */}
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white text-xs font-bold shadow-md ml-1">
-            IM
+            {profile?.full_name ? getInitials(profile.full_name) : profile?.email?.[0]?.toUpperCase() || "U"}
           </div>
         </div>
       </div>
