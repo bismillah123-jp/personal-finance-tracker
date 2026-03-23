@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Landmark, TrendingDown, TrendingUp, Wallet }
 import { AddTransactionFAB } from "@/components/add-transaction-fab";
 import { BudgetProgress } from "@/components/dashboard/BudgetProgress";
 import { CategoryBreakdown } from "@/components/dashboard/CategoryBreakdown";
+import { GoldPriceCard } from "@/components/dashboard/GoldPriceCard";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
 import { AppShell } from "@/components/layout/AppShell";
@@ -231,7 +232,8 @@ export default function DashboardPage() {
               <div className="xl:col-span-2">
                 <CashFlowChart data={cashFlowData} />
               </div>
-              <div>
+              <div className="space-y-6">
+                <GoldPriceCard />
                 <BudgetProgress budgets={uiBudgets} />
               </div>
             </div>
