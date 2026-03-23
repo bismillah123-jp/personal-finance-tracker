@@ -1,20 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Edit2, PiggyBank, Plus, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -23,280 +23,333 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from "@/components/providers";
+import { createBudget, deleteBudget, getBudgetProgress, updateBudget } from "@/lib/supabase";
+import { exportBudgetReport } from "@/lib/export";
+import { mapBudgetToUi, toNumber } from "@/lib/data-utils";
 import { EXPENSE_CATEGORIES } from "@/types";
-import { formatCurrency, getMonthName, getCurrentMonth } from "@/lib/utils";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Edit2,
-  Trash2,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  PiggyBank,
-} from "lucide-react";
+import { formatCurrency, getCurrentMonth, getMonthName } from "@/lib/utils";
 
-interface BudgetItem {
+interface BudgetProgressItem {
   id: string;
+  user_id: string;
   category: string;
-  limit: number;
-  spent: number;
+  limit_amount: number;
+  wallet_id?: string;
   month: string;
+  created_at: string;
+  updated_at: string;
+  spent: number;
+  percentage: number;
+  isOverBudget: boolean;
 }
 
-const MOCK_BUDGETS: BudgetItem[] = [
-  { id: "b1", category: "makanan", limit: 2_000_000, spent: 1_650_000, month: "2024-03" },
-  { id: "b2", category: "transportasi", limit: 500_000, spent: 350_000, month: "2024-03" },
-  { id: "b3", category: "hiburan", limit: 600_000, spent: 450_000, month: "2024-03" },
-  { id: "b4", category: "belanja", limit: 1_500_000, spent: 1_890_000, month: "2024-03" },
-  { id: "b5", category: "kesehatan", limit: 300_000, spent: 250_000, month: "2024-03" },
-  { id: "b6", category: "tagihan", limit: 800_000, spent: 550_000, month: "2024-03" },
-];
-
-const getCategoryInfo = (categoryId: string) => {
-  return EXPENSE_CATEGORIES.find(c => c.id === categoryId) || { label: categoryId, icon: "📦", color: "#888" };
-};
+const getCategoryInfo = (categoryId: string) =>
+  EXPENSE_CATEGORIES.find((category) => category.id === categoryId) || {
+    label: categoryId,
+    icon: "📦",
+    color: "#888",
+  };
 
 export default function BudgetingPage() {
+  const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingBudget, setEditingBudget] = useState<BudgetItem | null>(null);
-  const [newBudget, setNewBudget] = useState({ category: "", limit: "" });
-  
-  const monthLabel = getMonthName(currentMonth);
-  
-  const totalBudget = MOCK_BUDGETS.reduce((s, b) => s + b.limit, 0);
-  const totalSpent = MOCK_BUDGETS.reduce((s, b) => s + b.spent, 0);
-  const totalRemaining = totalBudget - totalSpent;
-  
-  const overBudgetCount = MOCK_BUDGETS.filter(b => b.spent > b.limit).length;
-  const healthyBudgetCount = MOCK_BUDGETS.filter(b => b.spent <= b.limit * 0.8).length;
+  const [budgets, setBudgets] = useState<BudgetProgressItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<BudgetProgressItem | null>(null);
+  const [form, setForm] = useState({ category: "", limit: "" });
 
-  const handleAddBudget = () => {
-    if (!newBudget.category || !newBudget.limit) return;
-    // Add budget logic here
-    setShowAddModal(false);
-    setNewBudget({ category: "", limit: "" });
+  const monthLabel = getMonthName(currentMonth);
+
+  const loadBudgets = async () => {
+    if (!user) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await getBudgetProgress(user.id, currentMonth);
+      setBudgets(data as BudgetProgressItem[]);
+    } catch (loadError: any) {
+      console.error(loadError);
+      setError(loadError?.message || "Budget belum bisa dimuat.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBudgets();
+  }, [user, currentMonth]);
+
+  const totalBudget = useMemo(() => budgets.reduce((sum, budget) => sum + toNumber(budget.limit_amount), 0), [budgets]);
+  const totalSpent = useMemo(() => budgets.reduce((sum, budget) => sum + toNumber(budget.spent), 0), [budgets]);
+  const totalRemaining = totalBudget - totalSpent;
+  const overBudgetCount = budgets.filter((budget) => budget.isOverBudget).length;
+
+  const openCreateModal = () => {
+    setEditingBudget(null);
+    setForm({ category: "", limit: "" });
+    setShowModal(true);
+  };
+
+  const openEditModal = (budget: BudgetProgressItem) => {
+    setEditingBudget(budget);
+    setForm({ category: budget.category, limit: String(toNumber(budget.limit_amount)) });
+    setShowModal(true);
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    if (!form.category || !form.limit) {
+      window.alert("Kategori dan limit budget wajib diisi ya.");
+      return;
+    }
+
+    try {
+      if (editingBudget) {
+        await updateBudget(editingBudget.id, user.id, {
+          category: form.category,
+          limit_amount: Number(form.limit),
+          month: currentMonth,
+        });
+      } else {
+        await createBudget({
+          user_id: user.id,
+          category: form.category,
+          limit_amount: Number(form.limit),
+          month: currentMonth,
+        });
+      }
+
+      setShowModal(false);
+      await loadBudgets();
+    } catch (saveError: any) {
+      window.alert(saveError?.message || "Budget gagal disimpan.");
+    }
+  };
+
+  const handleDelete = async (budgetId: string) => {
+    if (!user) return;
+    if (!window.confirm("Yakin mau hapus budget ini?")) return;
+
+    try {
+      await deleteBudget(budgetId, user.id);
+      await loadBudgets();
+    } catch (deleteError: any) {
+      window.alert(deleteError?.message || "Budget gagal dihapus.");
+    }
   };
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="mx-auto max-w-7xl space-y-6 min-w-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Budgeting</h1>
-            <p className="text-sm text-muted-foreground">Kelola batas pengeluaran Anda</p>
+            <p className="text-sm text-muted-foreground">Atur limit pengeluaran biar notif dan kontrol keuangan kamu makin waras.</p>
           </div>
-          <Button onClick={() => setShowAddModal(true)} className="gap-2">
-            <Plus className="w-4 h-4" />
-            Tambah Budget
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" className="rounded-xl" onClick={() => exportBudgetReport(budgets.map(mapBudgetToUi), monthLabel)} disabled={!budgets.length}>
+              Export laporan
+            </Button>
+            <Button onClick={openCreateModal} className="gap-2 rounded-xl">
+              <Plus className="h-4 w-4" />
+              Tambah budget
+            </Button>
+          </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-2 sm:px-4">
+          <button
+            onClick={() => {
+              const [year, month] = currentMonth.split("-").map(Number);
+              const nextDate = new Date(year, month - 2, 1);
+              setCurrentMonth(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`);
+            }}
+            className="rounded-xl p-2 transition hover:bg-accent"
+          >
+            <ChevronLeft className="h-5 w-5 text-muted-foreground" />
+          </button>
+          <div className="min-w-0 text-center">
+            <p className="truncate text-base font-semibold">{monthLabel}</p>
+            <p className="text-xs text-muted-foreground">{budgets.length} kategori budget</p>
+          </div>
+          <button
+            onClick={() => {
+              const [year, month] = currentMonth.split("-").map(Number);
+              const nextDate = new Date(year, month, 1);
+              setCurrentMonth(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`);
+            }}
+            className="rounded-xl p-2 transition hover:bg-accent"
+          >
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <PiggyBank className="w-5 h-5 text-primary" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <PiggyBank className="h-5 w-5 text-primary" />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total Budget</p>
-                  <p className="text-lg font-bold">{formatCurrency(totalBudget)}</p>
+                  <p className="break-words text-lg font-bold">{formatCurrency(totalBudget)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
-                  <TrendingDown className="w-5 h-5 text-rose-500" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10">
+                  <TrendingDown className="h-5 w-5 text-rose-500" />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total Terpakai</p>
-                  <p className="text-lg font-bold">{formatCurrency(totalSpent)}</p>
+                  <p className="break-words text-lg font-bold">{formatCurrency(totalSpent)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-emerald-500" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
+                  <TrendingUp className="h-5 w-5 text-emerald-500" />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Sisa Budget</p>
-                  <p className="text-lg font-bold text-emerald-600">{formatCurrency(totalRemaining)}</p>
+                  <p className={`break-words text-lg font-bold ${totalRemaining >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{formatCurrency(totalRemaining)}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Melebihi Budget</p>
-                  <p className="text-lg font-bold">{overBudgetCount} kategori</p>
+                  <p className="break-words text-lg font-bold">{overBudgetCount} kategori</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Month Navigation */}
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => {
-              const [y, m] = currentMonth.split("-").map(Number);
-              const d = new Date(y, m - 2, 1);
-              setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-            }}
-            className="p-2 rounded-xl hover:bg-accent transition-colors"
-          >
-            <ChevronLeft className="w-5 h-5 text-muted-foreground" />
-          </button>
-          <div className="text-center">
-            <h2 className="text-lg font-semibold">{monthLabel}</h2>
-            <p className="text-xs text-muted-foreground">{MOCK_BUDGETS.length} kategori budget</p>
-          </div>
-          <button
-            onClick={() => {
-              const [y, m] = currentMonth.split("-").map(Number);
-              const d = new Date(y, m, 1);
-              setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-            }}
-            className="p-2 rounded-xl hover:bg-accent transition-colors"
-          >
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
-          </button>
-        </div>
-
-        {/* Overall Progress */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium">Penggunaan Budget Keseluruhan</span>
-              <span className="text-sm font-bold">{Math.round((totalSpent / totalBudget) * 100)}%</span>
-            </div>
-            <Progress 
-              value={(totalSpent / totalBudget) * 100} 
-              className="h-3"
-              indicatorClassName={totalSpent > totalBudget ? "bg-rose-500" : ""}
-            />
-            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+          <CardHeader>
+            <CardTitle>Progress keseluruhan</CardTitle>
+            <CardDescription>Semakin dekat 100%, makin mepet limitnya.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-3 flex items-center justify-between gap-3 text-sm">
               <span>{formatCurrency(totalSpent)} terpakai</span>
-              <span>{formatCurrency(totalRemaining)} tersisa</span>
+              <span className="font-semibold">{totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0}%</span>
             </div>
+            <Progress value={totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0} className="h-3" />
           </CardContent>
         </Card>
 
-        {/* Budget List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {MOCK_BUDGETS.map((budget) => {
-            const cat = getCategoryInfo(budget.category);
-            const percentage = Math.min((budget.spent / budget.limit) * 100, 100);
-            const isOverBudget = budget.spent > budget.limit;
-            const isWarning = percentage >= 80 && percentage < 100;
-            
-            return (
-              <Card 
-                key={budget.id} 
-                className={`hover:shadow-md transition-shadow cursor-pointer ${isOverBudget ? "border-rose-500/50" : ""}`}
-                onClick={() => setEditingBudget(budget)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
-                        style={{ backgroundColor: cat.color + "20" }}
-                      >
-                        {cat.icon}
+        <Card>
+          <CardHeader>
+            <CardTitle>Daftar budget</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Lagi muat budget...</p>
+            ) : error ? (
+              <p className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-200">{error}</p>
+            ) : budgets.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                <p className="text-base font-semibold">Belum ada budget</p>
+                <p className="mt-2 text-sm text-muted-foreground">Akun baru jadi bersih. Tambah budget pertama biar ada pengingat pengeluaran.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {budgets.map((budget) => {
+                  const category = getCategoryInfo(budget.category);
+                  const percentage = Math.min((toNumber(budget.spent) / Math.max(1, toNumber(budget.limit_amount))) * 100, 100);
+                  const isOver = budget.isOverBudget;
+                  const isWarning = percentage >= 80 && percentage < 100;
+
+                  return (
+                    <div key={budget.id} className={`rounded-2xl border p-4 ${isOver ? "border-rose-500/40" : "border-border"}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xl" style={{ backgroundColor: `${category.color}20` }}>
+                            {category.icon}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold">{category.label}</p>
+                            <p className="text-xs text-muted-foreground">{formatCurrency(toNumber(budget.spent))} / {formatCurrency(toNumber(budget.limit_amount))}</p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 gap-2">
+                          <Button size="icon" variant="outline" className="h-9 w-9 rounded-xl" onClick={() => openEditModal(budget)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button size="icon" variant="outline" className="h-9 w-9 rounded-xl text-rose-600 hover:text-rose-600" onClick={() => handleDelete(budget.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{cat.label}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatCurrency(budget.spent)} / {formatCurrency(budget.limit)}
-                        </p>
+
+                      <div className="mt-4 space-y-2">
+                        <Progress
+                          value={percentage}
+                          className="h-2"
+                          indicatorClassName={isOver ? "bg-rose-500" : isWarning ? "bg-amber-500" : "bg-emerald-500"}
+                        />
+                        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+                          <span className="break-words">{isOver ? `Lebih ${formatCurrency(toNumber(budget.spent) - toNumber(budget.limit_amount))}` : `${formatCurrency(toNumber(budget.limit_amount) - toNumber(budget.spent))} tersisa`}</span>
+                          <span className="font-semibold">{Math.round(percentage)}%</span>
+                        </div>
                       </div>
                     </div>
-                    {isOverBudget && (
-                      <Badge variant="destructive" className="gap-1">
-                        <AlertTriangle className="w-3 h-3" />
-                        Over
-                      </Badge>
-                    )}
-                    {isWarning && (
-                      <Badge variant="outline" className="gap-1 text-amber-500 border-amber-500">
-                        <AlertTriangle className="w-3 h-3" />
-                        Hampir
-                      </Badge>
-                    )}
-                  </div>
-                  
-                  <Progress 
-                    value={percentage} 
-                    className="h-2"
-                    indicatorClassName={isOverBudget ? "bg-rose-500" : isWarning ? "bg-amber-500" : ""}
-                  />
-                  
-                  <div className="flex justify-between mt-2 text-xs">
-                    <span className={isOverBudget ? "text-rose-600 font-medium" : "text-muted-foreground"}>
-                      {isOverBudget ? "Melebihi " : ""}{formatCurrency(Math.abs(budget.limit - budget.spent))}
-                      {!isOverBudget && " tersisa"}
-                    </span>
-                    <span className="font-medium">{Math.round(percentage)}%</span>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* Add Budget Modal */}
-        <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <Dialog open={showModal} onOpenChange={setShowModal}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Tambah Budget Baru</DialogTitle>
-              <DialogDescription>Atur batas pengeluaran untuk kategori ini</DialogDescription>
+              <DialogTitle>{editingBudget ? "Edit budget" : "Tambah budget"}</DialogTitle>
+              <DialogDescription>Atur limit pengeluaran per kategori biar notifnya relevan.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Kategori</Label>
-                <Select value={newBudget.category} onValueChange={(v) => setNewBudget(prev => ({ ...prev, category: v }))}>
+                <Select value={form.category} onValueChange={(value) => setForm((prev) => ({ ...prev, category: value }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Pilih kategori" />
                   </SelectTrigger>
                   <SelectContent>
-                    {EXPENSE_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.icon} {cat.label}
+                    {EXPENSE_CATEGORIES.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.icon} {category.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Batas Budget (Rp)</Label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={newBudget.limit}
-                  onChange={(e) => setNewBudget(prev => ({ ...prev, limit: e.target.value }))}
-                />
+                <Label>Batas budget</Label>
+                <Input type="number" placeholder="0" value={form.limit} onChange={(event) => setForm((prev) => ({ ...prev, limit: event.target.value }))} />
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddModal(false)}>Batal</Button>
-              <Button onClick={handleAddBudget}>Simpan</Button>
+              <Button variant="outline" onClick={() => setShowModal(false)}>Batal</Button>
+              <Button onClick={handleSave}>Simpan</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -1,13 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AddTransactionFAB } from "@/components/add-transaction-fab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -18,145 +16,203 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { TransactionForm } from "@/components/forms/transaction-form";
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, Transaction } from "@/types";
-import { formatCurrency, formatDate, getMonthName, getCurrentMonth } from "@/lib/utils";
+import { useAuth } from "@/components/providers";
+import { deleteTransaction, getTransactions, getWallets, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
+import { exportToCSV, exportToPDF } from "@/lib/export";
+import { mapTransactionToUi, mapWalletToUi, toNumber } from "@/lib/data-utils";
+import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from "@/lib/utils";
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/types";
 import {
-  Search,
-  Filter,
+  ArrowDownRight,
+  ArrowUpRight,
   ChevronLeft,
   ChevronRight,
-  ArrowUpRight,
-  ArrowDownRight,
-  MoreHorizontal,
-  Edit2,
-  Trash2,
   Download,
+  Edit2,
+  Search,
+  Trash2,
+  Wallet,
 } from "lucide-react";
-
-const MOCK_TRANSACTIONS: Transaction[] = [
-  { id: "t1", type: "income", amount: 8_500_000, category: "gaji", walletId: "w1", date: "2024-03-01", note: "Gaji bulan Maret", createdAt: "2024-03-01" },
-  { id: "t2", type: "expense", amount: 1_200_000, category: "makanan", walletId: "w1", date: "2024-03-02", note: "Belanja mingguan", createdAt: "2024-03-02" },
-  { id: "t3", type: "expense", amount: 350_000, category: "transportasi", walletId: "w2", date: "2024-03-03", note: "Grab ke kantor", createdAt: "2024-03-03" },
-  { id: "t4", type: "expense", amount: 450_000, category: "hiburan", walletId: "w1", date: "2024-03-05", note: "Nonton bioskop", createdAt: "2024-03-05" },
-  { id: "t5", type: "income", amount: 1_500_000, category: "freelance", walletId: "w1", date: "2024-03-07", note: "Project freelance desain", createdAt: "2024-03-07" },
-  { id: "t6", type: "expense", amount: 75_000, category: "makanan", walletId: "w2", date: "2024-03-08", note: "Kopi & snack", createdAt: "2024-03-08" },
-  { id: "t7", type: "expense", amount: 890_000, category: "belanja", walletId: "w1", date: "2024-03-10", note: "Shopping online", createdAt: "2024-03-10" },
-  { id: "t8", type: "expense", amount: 250_000, category: "kesehatan", walletId: "w3", date: "2024-03-12", note: "Vitamin & obat", createdAt: "2024-03-12" },
-  { id: "t9", type: "expense", amount: 550_000, category: "tagihan", walletId: "w1", date: "2024-03-15", note: "Token listrik", createdAt: "2024-03-15" },
-  { id: "t10", type: "expense", amount: 125_000, category: "transportasi", walletId: "w2", date: "2024-03-16", note: "Parkir & tol", createdAt: "2024-03-16" },
-];
+import Link from "next/link";
 
 const getCategoryInfo = (categoryId: string, type: "income" | "expense") => {
   const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
-  return categories.find(c => c.id === categoryId) || { label: categoryId, icon: "📦", color: "#888" };
+  return categories.find((category) => category.id === categoryId) || {
+    label: categoryId,
+    icon: "📦",
+    color: "#888",
+  };
 };
 
 export default function TransactionsPage() {
+  const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
+  const [transactions, setTransactions] = useState<DbTransaction[]>([]);
+  const [wallets, setWallets] = useState<DbWallet[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [showFilters, setShowFilters] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addType, setAddType] = useState<"income" | "expense">("expense");
+  const [editingTransaction, setEditingTransaction] = useState<DbTransaction | null>(null);
 
   const monthLabel = getMonthName(currentMonth);
-  
-  const filteredTransactions = MOCK_TRANSACTIONS.filter(t => {
-    const matchesSearch = t.note?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          t.category.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = typeFilter === "all" || t.type === typeFilter;
-    const matchesCategory = categoryFilter === "all" || t.category === categoryFilter;
-    return matchesSearch && matchesType && matchesCategory;
-  });
 
-  const totalIncome = MOCK_TRANSACTIONS.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0);
-  const totalExpense = MOCK_TRANSACTIONS.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
+  const loadData = async () => {
+    if (!user) return;
+    setLoading(true);
+    setError("");
+
+    try {
+      const [transactionList, walletList] = await Promise.all([
+        getTransactions(user.id, { month: currentMonth }),
+        getWallets(user.id),
+      ]);
+      setTransactions(transactionList);
+      setWallets(walletList);
+    } catch (loadError: any) {
+      console.error(loadError);
+      setError(loadError?.message || "Transaksi belum bisa dimuat.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [user, currentMonth]);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      const matchesSearch =
+        transaction.note?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        transaction.category.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = typeFilter === "all" || transaction.type === typeFilter;
+      const matchesCategory = categoryFilter === "all" || transaction.category === categoryFilter;
+      return matchesSearch && matchesType && matchesCategory;
+    });
+  }, [transactions, searchQuery, typeFilter, categoryFilter]);
+
+  const totalIncome = transactions
+    .filter((transaction) => transaction.type === "income")
+    .reduce((sum, transaction) => sum + toNumber(transaction.amount), 0);
+  const totalExpense = transactions
+    .filter((transaction) => transaction.type === "expense")
+    .reduce((sum, transaction) => sum + toNumber(transaction.amount), 0);
   const balance = totalIncome - totalExpense;
+
+  const handleDelete = async (transactionId: string) => {
+    if (!user) return;
+    const confirmed = window.confirm("Yakin mau hapus transaksi ini?");
+    if (!confirmed) return;
+
+    try {
+      await deleteTransaction(transactionId, user.id);
+      await loadData();
+    } catch (deleteError: any) {
+      window.alert(deleteError?.message || "Transaksi gagal dihapus.");
+    }
+  };
+
+  const handleExportCsv = () => {
+    exportToCSV(transactions.map(mapTransactionToUi), wallets.map(mapWalletToUi), `transactions_${currentMonth}`);
+  };
+
+  const handleExportPdf = () => {
+    exportToPDF(transactions.map(mapTransactionToUi), wallets.map(mapWalletToUi), {
+      totalIncome,
+      totalExpense,
+      balance,
+      period: monthLabel,
+    });
+  };
 
   return (
     <AppShell>
-      <div className="space-y-6 max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+      <div className="mx-auto max-w-7xl space-y-6 min-w-0">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
             <h1 className="text-2xl font-bold">Transaksi</h1>
-            <p className="text-sm text-muted-foreground">{monthLabel}</p>
+            <p className="text-sm text-muted-foreground break-words">Semua pemasukan dan pengeluaran untuk {monthLabel}</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-2">
-              <Download className="w-4 h-4" />
-              Export
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-2 rounded-xl" onClick={handleExportCsv} disabled={!transactions.length}>
+              <Download className="h-4 w-4" />
+              Export CSV
             </Button>
+            <Button variant="outline" size="sm" className="gap-2 rounded-xl" onClick={handleExportPdf} disabled={!transactions.length}>
+              <Download className="h-4 w-4" />
+              Export PDF
+            </Button>
+            <AddTransactionFAB
+              canCreateTransaction={wallets.length > 0}
+              disabledReason="Tambah dompet dulu di Pengaturan biar transaksi bisa disimpan."
+              onSaved={loadData}
+            />
           </div>
         </div>
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-4">
+        {!wallets.length && !loading && (
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-base font-semibold">Belum ada dompet</p>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Biar transaksi gak kosong terus, bikin dompet dulu. Abis itu semua tombol tambah transaksi langsung aktif.
+                </p>
+              </div>
+              <Button asChild className="rounded-xl">
+                <Link href="/settings#wallets">
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Kelola dompet
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <Card>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                  <ArrowUpRight className="w-4 h-4 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Pemasukan</p>
-                  <p className="text-sm font-bold text-emerald-600">{formatCurrency(totalIncome)}</p>
-                </div>
-              </div>
+              <p className="text-xs text-muted-foreground">Total Pemasukan</p>
+              <p className="mt-1 break-words text-xl font-bold text-emerald-600">{formatCurrency(totalIncome)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-rose-500/10 flex items-center justify-center">
-                  <ArrowDownRight className="w-4 h-4 text-rose-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Total Pengeluaran</p>
-                  <p className="text-sm font-bold text-rose-600">{formatCurrency(totalExpense)}</p>
-                </div>
-              </div>
+              <p className="text-xs text-muted-foreground">Total Pengeluaran</p>
+              <p className="mt-1 break-words text-xl font-bold text-rose-600">{formatCurrency(totalExpense)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <span className="text-xs">=</span>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Saldo</p>
-                  <p className={`text-sm font-bold ${balance >= 0 ? "text-primary" : "text-rose-600"}`}>
-                    {formatCurrency(balance)}
-                  </p>
-                </div>
-              </div>
+              <p className="text-xs text-muted-foreground">Saldo Bulan Ini</p>
+              <p className={`mt-1 break-words text-xl font-bold ${balance >= 0 ? "text-primary" : "text-rose-600"}`}>
+                {formatCurrency(balance)}
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Filters */}
         <Card>
           <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-3 lg:flex-row">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Cari transaksi..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(event) => setSearchQuery(event.target.value)}
                   className="pl-9"
                 />
               </div>
-              <Select value={typeFilter} onValueChange={(v: any) => setTypeFilter(v)}>
-                <SelectTrigger className="w-full sm:w-36">
+              <Select value={typeFilter} onValueChange={(value: any) => setTypeFilter(value)}>
+                <SelectTrigger className="w-full lg:w-40">
                   <SelectValue placeholder="Tipe" />
                 </SelectTrigger>
                 <SelectContent>
@@ -165,15 +221,15 @@ export default function TransactionsPage() {
                   <SelectItem value="expense">Pengeluaran</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={categoryFilter} onValueChange={(v) => setCategoryFilter(v)}>
-                <SelectTrigger className="w-full sm:w-44">
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-full lg:w-52">
                   <SelectValue placeholder="Kategori" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Semua Kategori</SelectItem>
-                  {[...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.icon} {cat.label}
+                  <SelectItem value="all">Semua kategori</SelectItem>
+                  {[...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.icon} {category.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -182,66 +238,98 @@ export default function TransactionsPage() {
           </CardContent>
         </Card>
 
-        {/* Month Navigation */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-3 py-2 sm:px-4">
           <button
             onClick={() => {
-              const [y, m] = currentMonth.split("-").map(Number);
-              const d = new Date(y, m - 2, 1);
-              setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+              const [year, month] = currentMonth.split("-").map(Number);
+              const nextDate = new Date(year, month - 2, 1);
+              setCurrentMonth(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`);
             }}
-            className="p-2 rounded-xl hover:bg-accent transition-colors"
+            className="rounded-xl p-2 transition hover:bg-accent"
           >
-            <ChevronLeft className="w-5 h-5 text-muted-foreground" />
+            <ChevronLeft className="h-5 w-5 text-muted-foreground" />
           </button>
-          <h2 className="text-lg font-semibold">{monthLabel}</h2>
+          <div className="min-w-0 text-center">
+            <p className="truncate text-base font-semibold">{monthLabel}</p>
+            <p className="text-xs text-muted-foreground">{filteredTransactions.length} transaksi tampil</p>
+          </div>
           <button
             onClick={() => {
-              const [y, m] = currentMonth.split("-").map(Number);
-              const d = new Date(y, m, 1);
-              setCurrentMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+              const [year, month] = currentMonth.split("-").map(Number);
+              const nextDate = new Date(year, month, 1);
+              setCurrentMonth(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`);
             }}
-            className="p-2 rounded-xl hover:bg-accent transition-colors"
+            className="rounded-xl p-2 transition hover:bg-accent"
           >
-            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
           </button>
         </div>
 
-        {/* Transaction List */}
         <Card>
-          <CardContent className="p-0 divide-y divide-border">
-            {filteredTransactions.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                <p>Tidak ada transaksi ditemukan</p>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Daftar transaksi</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {loading ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Lagi muat transaksi...</p>
+            ) : error ? (
+              <p className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-200">{error}</p>
+            ) : filteredTransactions.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
+                <p className="text-base font-semibold">Belum ada transaksi</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  Akun baru emang harusnya kosong. Begitu kamu mulai nambah transaksi, list ini langsung ngisi.
+                </p>
               </div>
             ) : (
               filteredTransactions.map((transaction) => {
-                const cat = getCategoryInfo(transaction.category, transaction.type);
+                const category = getCategoryInfo(transaction.category, transaction.type);
                 return (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => setEditingTransaction(transaction)}
-                  >
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-lg"
-                      style={{ backgroundColor: cat.color + "20" }}
-                    >
-                      {cat.icon}
+                  <div key={transaction.id} className="rounded-2xl border border-border p-4 transition hover:border-primary/20 hover:bg-accent/30">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-xl" style={{ backgroundColor: `${category.color}20` }}>
+                          {category.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="break-words text-sm font-semibold sm:text-base">{transaction.note || category.label}</p>
+                          <p className="mt-1 break-words text-xs text-muted-foreground sm:text-sm">
+                            {category.label} • {formatDate(transaction.date)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-3 sm:items-end">
+                        <p className={`break-words text-sm font-bold sm:text-base ${transaction.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
+                          {transaction.type === "income" ? (
+                            <ArrowUpRight className="mr-1 inline h-4 w-4" />
+                          ) : (
+                            <ArrowDownRight className="mr-1 inline h-4 w-4" />
+                          )}
+                          {formatCurrency(toNumber(transaction.amount))}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl"
+                            onClick={() => setEditingTransaction(transaction)}
+                          >
+                            <Edit2 className="mr-2 h-4 w-4" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl text-rose-600 hover:text-rose-600"
+                            onClick={() => handleDelete(transaction.id)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Hapus
+                          </Button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{transaction.note || cat.label}</p>
-                      <p className="text-xs text-muted-foreground">{cat.label} · {formatDate(transaction.date)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className={`font-bold ${transaction.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
-                        {transaction.type === "income" ? "+" : "-"}
-                        {formatCurrency(transaction.amount)}
-                      </p>
-                    </div>
-                    <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </Button>
                   </div>
                 );
               })
@@ -249,28 +337,27 @@ export default function TransactionsPage() {
           </CardContent>
         </Card>
 
-        {/* FAB */}
-        <AddTransactionFAB />
-
-        {/* Edit Modal */}
         <Dialog open={!!editingTransaction} onOpenChange={() => setEditingTransaction(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit Transaksi</DialogTitle>
-              <DialogDescription>Ubah detail transaksi ini</DialogDescription>
+              <DialogTitle>Edit transaksi</DialogTitle>
+              <DialogDescription>Ubah detail transaksi biar data tetap akurat.</DialogDescription>
             </DialogHeader>
             {editingTransaction && (
               <TransactionForm
                 initialData={{
                   id: editingTransaction.id,
                   type: editingTransaction.type,
-                  amount: editingTransaction.amount,
+                  amount: toNumber(editingTransaction.amount),
                   category: editingTransaction.category,
-                  walletId: editingTransaction.walletId,
+                  walletId: editingTransaction.wallet_id,
                   date: new Date(editingTransaction.date),
                   note: editingTransaction.note,
                 }}
-                onSuccess={() => setEditingTransaction(null)}
+                onSuccess={async () => {
+                  setEditingTransaction(null);
+                  await loadData();
+                }}
                 onCancel={() => setEditingTransaction(null)}
               />
             )}

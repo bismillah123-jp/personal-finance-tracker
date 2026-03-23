@@ -190,6 +190,16 @@ export async function updateWallet(walletId: string, userId: string, updates: Pa
   return data as Wallet;
 }
 
+async function applyWalletDelta(walletId: string, userId: string, delta: number) {
+  if (!delta) return;
+  const wallet = await getWallet(userId, walletId);
+  await updateWallet(walletId, userId, { balance: wallet.balance + delta });
+}
+
+function getTransactionSignedAmount(transaction: Pick<Transaction, "amount" | "type">) {
+  return transaction.type === "income" ? Number(transaction.amount) : Number(transaction.amount) * -1;
+}
+
 export async function deleteWallet(walletId: string, userId: string) {
   const { error } = await supabase
     .from("wallets")
@@ -295,14 +305,12 @@ export async function updateTransaction(
   updates: Partial<Transaction>
 ) {
   const oldTransaction = await getTransaction(userId, transactionId);
-  
-  if (oldTransaction.wallet_id && updates.wallet_id !== oldTransaction.wallet_id) {
-    if (oldTransaction.type === "income") {
-      await updateWalletBalance(oldTransaction.wallet_id, userId, oldTransaction.amount, "expense");
-    } else {
-      await updateWalletBalance(oldTransaction.wallet_id, userId, oldTransaction.amount, "income");
-    }
-  }
+  const nextTransaction = {
+    ...oldTransaction,
+    ...updates,
+    amount: Number(updates.amount ?? oldTransaction.amount),
+    type: (updates.type ?? oldTransaction.type) as "income" | "expense",
+  };
 
   const { data, error } = await supabase
     .from("transactions")
@@ -313,14 +321,20 @@ export async function updateTransaction(
     .single();
   if (error) throw error;
 
-  if (updates.wallet_id) {
-    await updateWalletBalance(
-      updates.wallet_id,
-      userId,
-      updates.amount || oldTransaction.amount,
-      (updates.type || oldTransaction.type) as "income" | "expense"
-    );
-  }
+  const walletDeltas = new Map<string, number>();
+  const pushDelta = (walletId: string | undefined, delta: number) => {
+    if (!walletId || !delta) return;
+    walletDeltas.set(walletId, (walletDeltas.get(walletId) ?? 0) + delta);
+  };
+
+  pushDelta(oldTransaction.wallet_id, getTransactionSignedAmount(oldTransaction) * -1);
+  pushDelta(nextTransaction.wallet_id, getTransactionSignedAmount(nextTransaction));
+
+  await Promise.all(
+    Array.from(walletDeltas.entries()).map(([walletId, delta]) =>
+      applyWalletDelta(walletId, userId, delta)
+    )
+  );
 
   return data as Transaction;
 }
@@ -576,6 +590,39 @@ export async function getDebtStats(userId: string) {
   const totalPiutang = piutang.reduce((sum, d) => sum + d.remaining_amount, 0);
 
   return { totalHutang, totalPiutang, netDebt: totalHutang - totalPiutang };
+}
+
+// ============================================================
+// ACCOUNT & DATA MANAGEMENT
+// ============================================================
+
+export async function requestPasswordReset(email: string) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${typeof window !== "undefined" ? window.location.origin : supabaseUrl}/auth/login`,
+  });
+  if (error) throw error;
+}
+
+export async function clearUserData(userId: string) {
+  const debts = await getDebts(userId);
+  if (debts.length) {
+    const { error: debtPaymentsError } = await supabase
+      .from("debt_payments")
+      .delete()
+      .in("debt_id", debts.map((debt) => debt.id));
+    if (debtPaymentsError) throw debtPaymentsError;
+  }
+
+  const operations = await Promise.all([
+    supabase.from("transactions").delete().eq("user_id", userId),
+    supabase.from("budgets").delete().eq("user_id", userId),
+    supabase.from("investments").delete().eq("user_id", userId),
+    supabase.from("debts").delete().eq("user_id", userId),
+    supabase.from("wallets").delete().eq("user_id", userId),
+  ]);
+
+  const failed = operations.find((operation) => operation.error);
+  if (failed?.error) throw failed.error;
 }
 
 // ============================================================

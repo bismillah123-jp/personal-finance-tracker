@@ -1,30 +1,49 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Minus, ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { TransactionForm } from "@/components/forms/transaction-form";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
+import { TransactionForm } from "@/components/forms/transaction-form";
 
-export function AddTransactionFAB() {
+interface AddTransactionFABProps {
+  canCreateTransaction?: boolean;
+  disabledReason?: string;
+  onSaved?: () => void;
+}
+
+export function AddTransactionFAB({
+  canCreateTransaction = true,
+  disabledReason = "Tambah dompet dulu ya biar transaksi bisa disimpan.",
+  onSaved,
+}: AddTransactionFABProps) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"income" | "expense">("expense");
 
+  const handleOpen = (nextType: "income" | "expense" = "expense") => {
+    if (!canCreateTransaction) {
+      window.alert(disabledReason);
+      return;
+    }
+
+    setType(nextType);
+    setOpen(true);
+  };
+
   return (
     <>
-      {/* Desktop Button */}
       <div className="hidden lg:flex items-center gap-2">
         <Button
           variant="outline"
           size="sm"
-          className="gap-2"
-          onClick={() => { setType("income"); setOpen(true); }}
+          className="gap-2 rounded-xl"
+          onClick={() => handleOpen("income")}
         >
           <Plus className="w-4 h-4" />
           Pemasukan
@@ -32,34 +51,36 @@ export function AddTransactionFAB() {
         <Button
           size="sm"
           variant="expense"
-          className="gap-2"
-          onClick={() => { setType("expense"); setOpen(true); }}
+          className="gap-2 rounded-xl"
+          onClick={() => handleOpen("expense")}
         >
           <Minus className="w-4 h-4" />
           Pengeluaran
         </Button>
       </div>
 
-      {/* Mobile FAB */}
       <Button
-        className="lg:hidden fixed bottom-24 right-6 h-14 w-14 rounded-2xl shadow-xl shadow-primary/25 z-40"
-        onClick={() => setOpen(true)}
+        className="fixed bottom-24 right-5 z-40 h-14 w-14 rounded-2xl shadow-xl shadow-primary/25 lg:hidden"
+        onClick={() => handleOpen("expense")}
+        aria-label="Tambah transaksi"
       >
         <ArrowLeftRight className="w-6 h-6" />
       </Button>
 
-      {/* Transaction Modal */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Catat Transaksi</DialogTitle>
+            <DialogTitle>Catat transaksi</DialogTitle>
             <DialogDescription>
-              Tambahkan transaksi baru ke dalam catatan keuangan Anda
+              Tambahkan transaksi baru ke catatan keuangan kamu.
             </DialogDescription>
           </DialogHeader>
           <TransactionForm
             defaultType={type}
-            onSuccess={() => setOpen(false)}
+            onSuccess={() => {
+              setOpen(false);
+              onSaved?.();
+            }}
             onCancel={() => setOpen(false)}
           />
         </DialogContent>
