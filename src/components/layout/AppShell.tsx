@@ -1,5 +1,6 @@
 "use client";
 
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 import { MobileNav } from "./MobileNav";
@@ -25,6 +26,11 @@ export function AppShell({ children }: AppShellProps) {
       <div className="lg:pl-64 pb-20 lg:pb-0">
         <Header />
         <main className="p-4 lg:p-6">
+          {!isSupabaseConfigured && (
+            <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+              Demo mode aktif — isi <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> dan <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> di <code className="font-mono">.env.local</code> buat ngaktifin login dan sinkronisasi data.
+            </div>
+          )}
           {children}
         </main>
       </div>

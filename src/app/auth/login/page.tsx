@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/providers";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -22,6 +23,12 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!isSupabaseConfigured) {
+      setError("Supabase belum dikonfigurasi. Isi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY dulu.");
+      return;
+    }
+
     setLoading(true);
 
     const { error } = await signIn(email, password);
@@ -71,6 +78,11 @@ export default function LoginPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
+                {!isSupabaseConfigured && (
+                  <div className="p-3 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 text-sm">
+                    Mode demo aktif. Login belum bisa dipakai sampai env Supabase diisi.
+                  </div>
+                )}
                 {error && (
                   <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
                     {error}
@@ -117,7 +129,7 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full h-11" disabled={loading}>
+                <Button type="submit" className="w-full h-11" disabled={loading || !isSupabaseConfigured}>
                   {loading ? (
                     <span className="flex items-center gap-2">
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />

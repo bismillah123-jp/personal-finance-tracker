@@ -3,7 +3,12 @@
 import * as React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
-import { supabase, Profile } from "@/lib/supabase";
+import {
+  supabase,
+  Profile,
+  isSupabaseConfigured,
+  supabaseConfigMessage,
+} from "@/lib/supabase";
 import { useRouter, usePathname } from "next/navigation";
 
 // ============================================================
@@ -73,6 +78,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const demoTimestamp = new Date().toISOString();
+const DEMO_PROFILE: Profile = {
+  id: "demo-user",
+  email: "demo@local",
+  full_name: "Demo User",
+  currency: "IDR",
+  locale: "id-ID",
+  theme: "system",
+  created_at: demoTimestamp,
+  updated_at: demoTimestamp,
+};
+
+const createSupabaseDisabledError = () =>
+  new Error(
+    "Supabase belum dikonfigurasi. Isi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY dulu ya."
+  );
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -82,6 +104,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      console.warn(supabaseConfigMessage);
+      setUser(null);
+      setSession(null);
+      setProfile(DEMO_PROFILE);
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -117,6 +148,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [pathname, router]);
 
   const fetchProfile = async (userId: string) => {
+    if (!isSupabaseConfigured) {
+      setProfile(DEMO_PROFILE);
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -142,11 +179,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: createSupabaseDisabledError() };
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
+    if (!isSupabaseConfigured) {
+      return { error: createSupabaseDisabledError() };
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -158,11 +203,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (!isSupabaseConfigured) {
+      setUser(null);
+      setSession(null);
+      setProfile(DEMO_PROFILE);
+      router.push("/auth/login");
+      return;
+    }
+
     await supabase.auth.signOut();
     router.push("/auth/login");
   };
 
   const updateProfileHandler = async (updates: Partial<Profile>) => {
+    if (!isSupabaseConfigured) {
+      setProfile(prev =>
+        prev
+          ? { ...prev, ...updates, updated_at: new Date().toISOString() }
+          : { ...DEMO_PROFILE, ...updates, updated_at: new Date().toISOString() }
+      );
+      return { error: null };
+    }
+
     if (!user) return { error: new Error("User not found") };
     
     const { error } = await supabase

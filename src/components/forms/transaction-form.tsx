@@ -18,7 +18,12 @@ import {
 } from "@/components/ui/select";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/types";
 import { useAuth } from "@/components/providers";
-import { createTransaction, getWallets } from "@/lib/supabase";
+import {
+  createTransaction,
+  getWallets,
+  isSupabaseConfigured,
+  supabaseConfigMessage,
+} from "@/lib/supabase";
 import { useEffect } from "react";
 
 interface TransactionFormProps {
@@ -35,6 +40,12 @@ interface TransactionFormProps {
     note?: string;
   };
 }
+
+const DEMO_WALLETS = [
+  { id: "demo-bank", name: "BCA Utama", type: "bank" },
+  { id: "demo-ewallet", name: "GoPay", type: "e-wallet" },
+  { id: "demo-cash", name: "Tunai", type: "cash" },
+];
 
 export function TransactionForm({
   defaultType = "expense",
@@ -68,6 +79,11 @@ export function TransactionForm({
   const selectedWallet = watch("walletId");
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setWallets(DEMO_WALLETS);
+      return;
+    }
+
     if (user) {
       getWallets(user.id)
         .then(setWallets)
@@ -84,6 +100,12 @@ export function TransactionForm({
   const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
 
   const onSubmit = async (data: any) => {
+    if (!isSupabaseConfigured) {
+      reset();
+      onSuccess?.();
+      return;
+    }
+
     if (!user) return;
     setLoading(true);
 
@@ -109,6 +131,12 @@ export function TransactionForm({
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
+      {!isSupabaseConfigured && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+          Demo mode aktif — {supabaseConfigMessage} Transaksi yang disimpan dari form ini belum permanen ya.
+        </div>
+      )}
+
       {/* Transaction Type Toggle */}
       <div className="grid grid-cols-2 gap-2 p-1 bg-muted rounded-xl">
         <button
@@ -233,6 +261,12 @@ export function TransactionForm({
         />
       </div>
 
+      {!isSupabaseConfigured && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+          Mode demo aktif — transaksi bisa diisi buat preview UI, tapi belum bakal kesimpan sampai env Supabase dikonfigurasi.
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-3 pt-2">
         {onCancel && (
@@ -251,8 +285,10 @@ export function TransactionForm({
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               Menyimpan...
             </>
-          ) : (
+          ) : isSupabaseConfigured ? (
             <>Simpan {type === "income" ? "Pemasukan" : "Pengeluaran"}</>
+          ) : (
+            <>Simpan Demo</>
           )}
         </Button>
       </div>
