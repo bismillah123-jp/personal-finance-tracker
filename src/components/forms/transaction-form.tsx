@@ -108,7 +108,7 @@ export function TransactionForm({
         setWallets(walletList.map((wallet) => ({ id: wallet.id, name: wallet.name, type: wallet.type })));
       } catch (loadError) {
         console.error("Failed to load wallets", loadError);
-        setError("Dompet belum bisa dimuat. Coba refresh dulu ya.");
+        setError("Daftar dompet belum dapat dimuat. Silakan muat ulang halaman.");
       }
     };
 
@@ -133,7 +133,7 @@ export function TransactionForm({
     }
 
     if (!user) {
-      setError("Kamu perlu login dulu ya best.");
+      setError("Silakan login terlebih dahulu.");
       return;
     }
 
@@ -181,13 +181,13 @@ export function TransactionForm({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
       {!isSupabaseConfigured && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-          Demo mode aktif — {supabaseConfigMessage} Transaksi yang kamu submit dari form ini belum permanen ya.
+          Mode demo aktif — {supabaseConfigMessage} Transaksi yang dikirim dari formulir ini tidak disimpan secara permanen.
         </div>
       )}
 
       {saveDisabled && (
         <div className="rounded-xl border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs leading-relaxed text-blue-900 dark:text-blue-100">
-          Belum ada dompet. Bikin dompet dulu di menu pengaturan biar transaksi bisa tersimpan rapi.
+          Belum ada dompet. Tambahkan dompet melalui menu pengaturan agar transaksi dapat disimpan.
         </div>
       )}
 

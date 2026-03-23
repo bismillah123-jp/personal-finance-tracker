@@ -1,60 +1,92 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
 
 export function PWAProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker
-          .register("/sw.js")
-          .then((registration) => {
-            console.log("SW registered:", registration.scope);
-          })
-          .catch((error) => {
-            console.log("SW registration failed:", error);
-          });
-      });
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      return;
     }
+
+    const registerServiceWorker = async () => {
+      try {
+        await navigator.serviceWorker.register("/sw.js");
+      } catch (error) {
+        console.error("Service worker registration failed", error);
+      }
+    };
+
+    registerServiceWorker();
   }, []);
 
   return <>{children}</>;
 }
 
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] = React.useState<any>(null);
-  const [isInstalled, setIsInstalled] = React.useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsInstalled(window.matchMedia("(display-mode: standalone)").matches);
-    }
+    if (typeof window === "undefined") return;
 
-    const handleBeforeInstall = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
+    const checkInstalledState = () => {
+      const standaloneDisplay = window.matchMedia("(display-mode: standalone)").matches;
+      const iosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+      setIsInstalled(standaloneDisplay || iosStandalone);
     };
 
-    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    checkInstalledState();
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredPrompt(event as BeforeInstallPromptEvent);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
 
-  const installApp = async () => {
-    if (!deferredPrompt) return;
+  const installApp = useCallback(async () => {
+    if (!deferredPrompt) return false;
 
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === "accepted") {
-      setIsInstalled(true);
+    setIsInstalling(true);
+
+    try {
+      await deferredPrompt.prompt();
+      const choiceResult = await deferredPrompt.userChoice;
+      const accepted = choiceResult.outcome === "accepted";
+
+      if (accepted) {
+        setIsInstalled(true);
+      }
+
+      return accepted;
+    } finally {
+      setDeferredPrompt(null);
+      setIsInstalling(false);
     }
-    setDeferredPrompt(null);
+  }, [deferredPrompt]);
+
+  return {
+    canInstall: Boolean(deferredPrompt) && !isInstalled,
+    isInstalled,
+    isInstalling,
+    installApp,
   };
-
-  return { deferredPrompt, isInstalled, installApp };
 }
-
-import React from "react";

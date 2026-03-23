@@ -48,20 +48,24 @@ export function Header() {
       setLoadingNotifications(true);
       try {
         const month = getCurrentMonth();
-        const [wallets, transactions, budgetProgress, debts] = await Promise.all([
+        const [wallets, transactions, budgets, debts] = await Promise.all([
           getWallets(user.id),
           getTransactions(user.id, { month }),
-          getBudgets(user.id, month).then(async (budgets) => {
-            const transactionList = await getTransactions(user.id, { month, type: "expense" });
-            return budgets.map((budget) => ({
-              ...budget,
-              spent: transactionList
-                .filter((transaction) => transaction.category === budget.category)
-                .reduce((sum, transaction) => sum + Number(transaction.amount), 0),
-            }));
-          }),
+          getBudgets(user.id, month),
           getDebts(user.id),
         ]);
+
+        const expenseByCategory = transactions
+          .filter((transaction) => transaction.type === "expense")
+          .reduce<Record<string, number>>((acc, transaction) => {
+            acc[transaction.category] = (acc[transaction.category] ?? 0) + Number(transaction.amount);
+            return acc;
+          }, {});
+
+        const budgetProgress = budgets.map((budget) => ({
+          ...budget,
+          spent: expenseByCategory[budget.category] ?? 0,
+        }));
 
         setNotifications(
           buildNotifications({
@@ -77,7 +81,7 @@ export function Header() {
           {
             id: "notif-error",
             title: "Notif belum bisa dimuat",
-            description: "Coba refresh halaman dulu ya best, terus cek lagi.",
+            description: "Silakan muat ulang halaman lalu coba kembali.",
             href: "/dashboard",
             tone: "warning",
           },
@@ -113,7 +117,7 @@ export function Header() {
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">FinTrack</p>
-              <p className="truncate text-[11px] text-muted-foreground">Finance bestie edition</p>
+              <p className="truncate text-[11px] text-muted-foreground">Personal Finance Tracker</p>
             </div>
           </div>
 
@@ -149,7 +153,7 @@ export function Header() {
                   : profile?.email?.[0]?.toUpperCase() || "U"}
               </div>
               <div className="hidden max-w-[140px] min-w-0 text-left sm:block">
-                <p className="truncate text-sm font-semibold">{profile?.full_name || "Akun kamu"}</p>
+                <p className="truncate text-sm font-semibold">{profile?.full_name || "Akun"}</p>
                 <p className="truncate text-xs text-muted-foreground">{profile?.email}</p>
               </div>
             </button>
@@ -162,14 +166,14 @@ export function Header() {
           <DialogHeader>
             <DialogTitle>Notifikasi & insight</DialogTitle>
             <DialogDescription>
-              Ringkasan hal penting yang perlu kamu cek dari akun keuanganmu.
+              Ringkasan informasi penting dari akun keuangan Anda.
             </DialogDescription>
           </DialogHeader>
 
           {loadingNotifications ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Lagi ambil update...
+              Memuat pembaruan...
             </div>
           ) : (
             <div className="space-y-3">
@@ -206,7 +210,7 @@ export function Header() {
                   : profile?.email?.[0]?.toUpperCase() || "U"}
               </div>
               <div className="min-w-0">
-                <p className="truncate text-base font-semibold">{profile?.full_name || "Akun kamu"}</p>
+                <p className="truncate text-base font-semibold">{profile?.full_name || "Akun"}</p>
                 <p className="truncate text-sm text-muted-foreground">{profile?.email}</p>
                 <p className="mt-1 text-xs text-muted-foreground">Tema aktif: {theme}</p>
               </div>

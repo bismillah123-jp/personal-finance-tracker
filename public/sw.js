@@ -1,153 +1,122 @@
-const CACHE_NAME = 'fintrack-v1';
-const STATIC_ASSETS = [
-  '/',
-  '/dashboard',
-  '/transactions',
-  '/budgeting',
-  '/investments',
-  '/debts',
-  '/settings',
-  '/manifest.json',
+const SW_VERSION = "fintrack-v2";
+const STATIC_CACHE = `${SW_VERSION}-static`;
+const RUNTIME_CACHE = `${SW_VERSION}-runtime`;
+
+const PRECACHE_ASSETS = [
+  "/",
+  "/manifest.json",
+  "/offline.html",
+  "/icons/icon-192x192.png",
+  "/icons/icon-512x512.png",
 ];
 
-self.addEventListener('install', (event) => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches
+      .open(STATIC_CACHE)
+      .then((cache) => cache.addAll(PRECACHE_ASSETS))
+      .catch((error) => {
+        console.error("Failed to precache assets", error);
+      }),
   );
+
   self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
+    caches.keys().then((cacheNames) =>
+      Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
+          .filter((cacheName) => ![STATIC_CACHE, RUNTIME_CACHE].includes(cacheName))
+          .map((cacheName) => caches.delete(cacheName)),
+      ),
+    ),
   );
+
   self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  
-  if (event.request.url.includes('/api/')) {
-    event.respondWith(networkFirst(event.request));
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  // Never hijack Supabase/API requests on other origins.
+  if (url.origin !== self.location.origin) return;
+
+  if (request.mode === "navigate") {
+    event.respondWith(networkFirst(request, RUNTIME_CACHE, "/offline.html"));
     return;
   }
 
-  event.respondWith(cacheFirst(event.request));
+  const isStaticAsset =
+    url.pathname.startsWith("/_next/static/") ||
+    url.pathname.startsWith("/icons/") ||
+    /\.(?:js|css|png|jpg|jpeg|webp|svg|ico|woff|woff2)$/.test(url.pathname);
+
+  if (isStaticAsset) {
+    event.respondWith(staleWhileRevalidate(request, STATIC_CACHE));
+    return;
+  }
+
+  event.respondWith(cacheFirst(request, RUNTIME_CACHE));
 });
 
-async function cacheFirst(request) {
-  const cachedResponse = await caches.match(request);
-  if (cachedResponse) {
-    return cachedResponse;
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
+
+  if (cached) return cached;
+
+  const response = await fetch(request);
+  if (response.ok) {
+    cache.put(request, response.clone());
   }
-  
-  try {
-    const networkResponse = await fetch(request);
-    if (networkResponse.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, networkResponse.clone());
-    }
-    return networkResponse;
-  } catch (error) {
-    return new Response('Offline', { status: 503 });
-  }
+
+  return response;
 }
 
-async function networkFirst(request) {
+async function networkFirst(request, cacheName, fallbackUrl) {
+  const cache = await caches.open(cacheName);
+
   try {
-    const networkResponse = await fetch(request);
-    if (networkResponse.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, networkResponse.clone());
+    const response = await fetch(request);
+    if (response.ok) {
+      cache.put(request, response.clone());
     }
-    return networkResponse;
-  } catch (error) {
-    const cachedResponse = await caches.match(request);
-    if (cachedResponse) {
-      return cachedResponse;
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+
+    if (fallbackUrl) {
+      const fallback = await caches.match(fallbackUrl);
+      if (fallback) return fallback;
     }
-    return new Response(JSON.stringify({ error: 'Offline' }), {
+
+    return new Response("Offline", {
       status: 503,
-      headers: { 'Content-Type': 'application/json' }
+      statusText: "Offline",
+      headers: { "Content-Type": "text/plain" },
     });
   }
 }
 
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-transactions') {
-    event.waitUntil(syncTransactions());
-  }
-});
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cached = await cache.match(request);
 
-async function syncTransactions() {
-  const db = await openDB();
-  const pendingTransactions = await db.getAll('pendingTransactions');
-  
-  for (const transaction of pendingTransactions) {
-    try {
-      const response = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(transaction)
-      });
-      
+  const networkPromise = fetch(request)
+    .then((response) => {
       if (response.ok) {
-        await db.delete('pendingTransactions', transaction.id);
+        cache.put(request, response.clone());
       }
-    } catch (error) {
-      console.error('Failed to sync transaction:', error);
-    }
-  }
-}
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('FinTrackDB', 1);
-    
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-      if (!db.objectStoreNames.contains('pendingTransactions')) {
-        db.createObjectStore('pendingTransactions', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('wallets')) {
-        db.createObjectStore('wallets', { keyPath: 'id' });
-      }
-      if (!db.objectStoreNames.contains('cache')) {
-        db.createObjectStore('cache', { keyPath: 'key' });
-      }
-    };
-  });
-}
-
-self.addEventListener('push', (event) => {
-  const data = event.data?.json() || {};
-  
-  event.waitUntil(
-    self.registration.showNotification(data.title || 'FinTrack', {
-      body: data.body || 'Ada notifikasi baru',
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-72x72.png',
-      vibrate: [100, 50, 100],
-      data: { url: data.url || '/dashboard' }
+      return response;
     })
-  );
-});
+    .catch(() => null);
 
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  
-  event.waitUntil(
-    clients.openWindow(event.notification.data.url || '/dashboard')
-  );
-});
+  return cached || networkPromise || new Response("Offline", { status: 503 });
+}

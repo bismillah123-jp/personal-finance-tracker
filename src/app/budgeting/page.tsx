@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/components/providers";
-import { createBudget, deleteBudget, getBudgetProgress, updateBudget } from "@/lib/supabase";
+import { createBudget, deleteBudget, getBudgetProgress, getCachedBudgetProgressSnapshot, updateBudget } from "@/lib/supabase";
 import { exportBudgetReport } from "@/lib/export";
 import { mapBudgetToUi, toNumber } from "@/lib/data-utils";
 import { EXPENSE_CATEGORIES } from "@/types";
@@ -54,8 +54,9 @@ const getCategoryInfo = (categoryId: string) =>
 export default function BudgetingPage() {
   const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
-  const [budgets, setBudgets] = useState<BudgetProgressItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedBudgets = user ? getCachedBudgetProgressSnapshot(user.id, currentMonth) : [];
+  const [budgets, setBudgets] = useState<BudgetProgressItem[]>(cachedBudgets as BudgetProgressItem[]);
+  const [loading, setLoading] = useState(!cachedBudgets.length);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetProgressItem | null>(null);
@@ -63,9 +64,19 @@ export default function BudgetingPage() {
 
   const monthLabel = getMonthName(currentMonth);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const snapshot = getCachedBudgetProgressSnapshot(user.id, currentMonth);
+    if (snapshot.length) {
+      setBudgets(snapshot as BudgetProgressItem[]);
+      setLoading(false);
+    }
+  }, [currentMonth, user]);
+
   const loadBudgets = async () => {
     if (!user) return;
-    setLoading(true);
+    setLoading((prev) => (budgets.length === 0 ? true : prev));
     setError("");
 
     try {
@@ -103,7 +114,7 @@ export default function BudgetingPage() {
   const handleSave = async () => {
     if (!user) return;
     if (!form.category || !form.limit) {
-      window.alert("Kategori dan limit budget wajib diisi ya.");
+      window.alert("Kategori dan batas anggaran wajib diisi.");
       return;
     }
 
@@ -148,7 +159,7 @@ export default function BudgetingPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Budgeting</h1>
-            <p className="text-sm text-muted-foreground">Atur limit pengeluaran biar notif dan kontrol keuangan kamu makin waras.</p>
+            <p className="text-sm text-muted-foreground">Tetapkan batas pengeluaran untuk membantu pengendalian anggaran.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-xl" onClick={() => exportBudgetReport(budgets.map(mapBudgetToUi), monthLabel)} disabled={!budgets.length}>
@@ -246,7 +257,7 @@ export default function BudgetingPage() {
         <Card>
           <CardHeader>
             <CardTitle>Progress keseluruhan</CardTitle>
-            <CardDescription>Semakin dekat 100%, makin mepet limitnya.</CardDescription>
+            <CardDescription>Semakin mendekati 100%, semakin dekat penggunaan terhadap batas anggaran.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="mb-3 flex items-center justify-between gap-3 text-sm">
@@ -263,13 +274,13 @@ export default function BudgetingPage() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Lagi muat budget...</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">Memuat anggaran...</p>
             ) : error ? (
               <p className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-200">{error}</p>
             ) : budgets.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
                 <p className="text-base font-semibold">Belum ada budget</p>
-                <p className="mt-2 text-sm text-muted-foreground">Akun baru jadi bersih. Tambah budget pertama biar ada pengingat pengeluaran.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Tambahkan anggaran pertama untuk mulai memantau batas pengeluaran.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -324,7 +335,7 @@ export default function BudgetingPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingBudget ? "Edit budget" : "Tambah budget"}</DialogTitle>
-              <DialogDescription>Atur limit pengeluaran per kategori biar notifnya relevan.</DialogDescription>
+              <DialogDescription>Tetapkan batas pengeluaran per kategori.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">

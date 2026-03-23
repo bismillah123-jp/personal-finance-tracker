@@ -20,7 +20,7 @@ interface AddTransactionFABProps {
 
 export function AddTransactionFAB({
   canCreateTransaction = true,
-  disabledReason = "Tambah dompet dulu ya biar transaksi bisa disimpan.",
+  disabledReason = "Tambahkan dompet terlebih dahulu agar transaksi dapat disimpan.",
   onSaved,
 }: AddTransactionFABProps) {
   const [open, setOpen] = useState(false);
@@ -72,7 +72,7 @@ export function AddTransactionFAB({
           <DialogHeader>
             <DialogTitle>Catat transaksi</DialogTitle>
             <DialogDescription>
-              Tambahkan transaksi baru ke catatan keuangan kamu.
+              Tambahkan transaksi baru ke catatan keuangan Anda.
             </DialogDescription>
           </DialogHeader>
           <TransactionForm

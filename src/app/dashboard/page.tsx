@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { ChevronLeft, ChevronRight, Landmark, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { AddTransactionFAB } from "@/components/add-transaction-fab";
 import { BudgetProgress } from "@/components/dashboard/BudgetProgress";
-import { CashFlowChart } from "@/components/dashboard/CashFlowChart";
 import { CategoryBreakdown } from "@/components/dashboard/CategoryBreakdown";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { RecentTransactions } from "@/components/dashboard/RecentTransactions";
@@ -14,23 +14,50 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/providers";
 import { buildCashFlowSeries, mapBudgetToUi, mapTransactionToUi, mapWalletToUi, toNumber } from "@/lib/data-utils";
-import { getDashboardData, type Budget as DbBudget, type Debt as DbDebt, type Investment as DbInvestment, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
+import { getCachedDashboardSnapshot, getDashboardData, type Budget as DbBudget, type Debt as DbDebt, type Investment as DbInvestment, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
 import { formatCurrency, getCurrentMonth, getMonthName } from "@/lib/utils";
+
+const CashFlowChart = dynamic(
+  () => import("@/components/dashboard/CashFlowChart").then((mod) => mod.CashFlowChart),
+  {
+    ssr: false,
+    loading: () => (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">Menyiapkan grafik arus kas...</CardContent>
+      </Card>
+    ),
+  },
+);
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
-  const [wallets, setWallets] = useState<DbWallet[]>([]);
-  const [transactions, setTransactions] = useState<DbTransaction[]>([]);
-  const [budgets, setBudgets] = useState<Array<DbBudget & { spent?: number }>>([]);
-  const [investments, setInvestments] = useState<DbInvestment[]>([]);
-  const [debts, setDebts] = useState<DbDebt[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedDashboard = user ? getCachedDashboardSnapshot(user.id, currentMonth) : null;
+  const [wallets, setWallets] = useState<DbWallet[]>(cachedDashboard?.wallets ?? []);
+  const [transactions, setTransactions] = useState<DbTransaction[]>(cachedDashboard?.transactions ?? []);
+  const [budgets, setBudgets] = useState<Array<DbBudget & { spent?: number }>>(cachedDashboard?.budgets ?? []);
+  const [investments, setInvestments] = useState<DbInvestment[]>(cachedDashboard?.investments ?? []);
+  const [debts, setDebts] = useState<DbDebt[]>(cachedDashboard?.debts ?? []);
+  const [loading, setLoading] = useState(!cachedDashboard);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+
+    const snapshot = getCachedDashboardSnapshot(user.id, currentMonth);
+    if (!snapshot) return;
+
+    setWallets(snapshot.wallets);
+    setTransactions(snapshot.transactions);
+    setBudgets(snapshot.budgets);
+    setInvestments(snapshot.investments);
+    setDebts(snapshot.debts);
+    setLoading(false);
+  }, [currentMonth, user]);
 
   const loadData = async () => {
     if (!user) return;
-    setLoading(true);
+    setLoading((prev) => (wallets.length === 0 && transactions.length === 0 && budgets.length === 0 && investments.length === 0 && debts.length === 0 ? true : prev));
     setError("");
 
     try {
@@ -78,7 +105,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="break-words text-sm text-muted-foreground">Ringkasan keuangan kamu untuk {monthLabel}</p>
+            <p className="break-words text-sm text-muted-foreground">Ringkasan keuangan untuk {monthLabel}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -87,7 +114,7 @@ export default function DashboardPage() {
             </Button>
             <AddTransactionFAB
               canCreateTransaction={wallets.length > 0}
-              disabledReason="Tambah dompet dulu ya best, baru transaksi bisa dicatat dari dashboard."
+              disabledReason="Tambahkan dompet terlebih dahulu agar transaksi dapat dicatat dari dashboard."
               onSaved={loadData}
             />
           </div>
@@ -122,7 +149,7 @@ export default function DashboardPage() {
 
         {loading ? (
           <Card>
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">Lagi nyiapin dashboard kamu...</CardContent>
+            <CardContent className="p-8 text-center text-sm text-muted-foreground">Memuat dashboard...</CardContent>
           </Card>
         ) : error ? (
           <Card>
@@ -132,23 +159,23 @@ export default function DashboardPage() {
           <Card>
             <CardContent className="space-y-4 p-6 sm:p-8">
               <div>
-                <h2 className="text-xl font-bold">Akun baru harusnya kosong, dan sekarang memang kosong ✨</h2>
+                <h2 className="text-xl font-bold">Belum ada data keuangan</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                  Sebelumnya saldo dan transaksi muncul karena code lama ngasih data palsu bawaan. Sekarang dashboard cuma baca data asli dari akun kamu, jadi kalau belum ada input ya tampilannya kosong dan rapi.
+                  Dashboard akan menampilkan data setelah dompet, transaksi, anggaran, investasi, atau utang mulai dicatat.
                 </p>
               </div>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                 <div className="rounded-2xl border border-border p-4">
                   <p className="font-semibold">1. Bikin dompet</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Mulai dari dompet utama, e-wallet, atau rekening bank.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Tambahkan dompet utama, e-wallet, atau rekening bank sebagai sumber transaksi.</p>
                 </div>
                 <div className="rounded-2xl border border-border p-4">
                   <p className="font-semibold">2. Catat transaksi pertama</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Begitu transaksi masuk, grafik dan saldo langsung ikut hidup.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Setelah transaksi tercatat, saldo dan grafik akan diperbarui secara otomatis.</p>
                 </div>
                 <div className="rounded-2xl border border-border p-4">
                   <p className="font-semibold">3. Atur budget</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Supaya notifikasi dan reminder keuangan kamu jadi lebih berguna.</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Tetapkan anggaran agar pemantauan pengeluaran menjadi lebih terstruktur.</p>
                 </div>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -219,7 +246,7 @@ export default function DashboardPage() {
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-base font-semibold">Ringkasan dompet</p>
-                    <p className="text-sm text-muted-foreground">Saldo real-time dari akun kamu</p>
+                    <p className="text-sm text-muted-foreground">Saldo terkini dari akun Anda</p>
                   </div>
                   <Button asChild variant="outline" size="sm" className="rounded-xl">
                     <Link href="/settings#wallets">Kelola</Link>

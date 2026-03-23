@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { useAuth } from "@/components/providers";
-import { deleteTransaction, getTransactions, getWallets, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
+import { deleteTransaction, getCachedTransactionsSnapshot, getCachedWalletsSnapshot, getTransactions, getWallets, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
 import { exportToCSV, exportToPDF } from "@/lib/export";
 import { mapTransactionToUi, mapWalletToUi, toNumber } from "@/lib/data-utils";
 import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from "@/lib/utils";
@@ -52,9 +52,11 @@ const getCategoryInfo = (categoryId: string, type: "income" | "expense") => {
 export default function TransactionsPage() {
   const { user } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
-  const [transactions, setTransactions] = useState<DbTransaction[]>([]);
-  const [wallets, setWallets] = useState<DbWallet[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedTransactions = user ? getCachedTransactionsSnapshot(user.id, { month: currentMonth }) : [];
+  const cachedWallets = user ? getCachedWalletsSnapshot(user.id) : [];
+  const [transactions, setTransactions] = useState<DbTransaction[]>(cachedTransactions);
+  const [wallets, setWallets] = useState<DbWallet[]>(cachedWallets);
+  const [loading, setLoading] = useState(!(cachedTransactions.length || cachedWallets.length));
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
@@ -63,9 +65,22 @@ export default function TransactionsPage() {
 
   const monthLabel = getMonthName(currentMonth);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const nextTransactions = getCachedTransactionsSnapshot(user.id, { month: currentMonth });
+    const nextWallets = getCachedWalletsSnapshot(user.id);
+
+    if (nextTransactions.length || nextWallets.length) {
+      setTransactions(nextTransactions);
+      setWallets(nextWallets);
+      setLoading(false);
+    }
+  }, [currentMonth, user]);
+
   const loadData = async () => {
     if (!user) return;
-    setLoading(true);
+    setLoading((prev) => (transactions.length === 0 && wallets.length === 0 ? true : prev));
     setError("");
 
     try {
@@ -151,7 +166,7 @@ export default function TransactionsPage() {
             </Button>
             <AddTransactionFAB
               canCreateTransaction={wallets.length > 0}
-              disabledReason="Tambah dompet dulu di Pengaturan biar transaksi bisa disimpan."
+              disabledReason="Tambahkan dompet terlebih dahulu melalui menu Pengaturan agar transaksi dapat disimpan."
               onSaved={loadData}
             />
           </div>
@@ -163,7 +178,7 @@ export default function TransactionsPage() {
               <div className="min-w-0">
                 <p className="text-base font-semibold">Belum ada dompet</p>
                 <p className="text-sm leading-relaxed text-muted-foreground">
-                  Biar transaksi gak kosong terus, bikin dompet dulu. Abis itu semua tombol tambah transaksi langsung aktif.
+                  Tambahkan dompet terlebih dahulu agar seluruh fitur pencatatan transaksi dapat digunakan.
                 </p>
               </div>
               <Button asChild className="rounded-xl">
@@ -271,14 +286,14 @@ export default function TransactionsPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {loading ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Lagi muat transaksi...</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">Memuat transaksi...</p>
             ) : error ? (
               <p className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-200">{error}</p>
             ) : filteredTransactions.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
                 <p className="text-base font-semibold">Belum ada transaksi</p>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  Akun baru emang harusnya kosong. Begitu kamu mulai nambah transaksi, list ini langsung ngisi.
+                  Data transaksi akan ditampilkan setelah Anda mulai mencatat pemasukan atau pengeluaran.
                 </p>
               </div>
             ) : (
@@ -341,7 +356,7 @@ export default function TransactionsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit transaksi</DialogTitle>
-              <DialogDescription>Ubah detail transaksi biar data tetap akurat.</DialogDescription>
+              <DialogDescription>Perbarui detail transaksi agar data tetap akurat.</DialogDescription>
             </DialogHeader>
             {editingTransaction && (
               <TransactionForm

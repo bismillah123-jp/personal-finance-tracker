@@ -155,7 +155,7 @@ export function buildNotifications(args: {
     notifications.push({
       id: "wallet-empty",
       title: "Belum ada dompet",
-      description: "Tambahin dompet dulu biar transaksi, saldo, dan budgeting bisa kepake full.",
+      description: "Tambahkan dompet agar transaksi, saldo, dan anggaran dapat digunakan secara penuh.",
       href: "/settings#wallets",
       tone: "warning",
     });
@@ -165,7 +165,7 @@ export function buildNotifications(args: {
     notifications.push({
       id: "transactions-empty",
       title: "Belum ada transaksi bulan ini",
-      description: "Catat pemasukan atau pengeluaran pertama kamu biar dashboard mulai ngisi data.",
+      description: "Catat pemasukan atau pengeluaran pertama agar dashboard mulai menampilkan data.",
       href: "/transactions",
       tone: "info",
     });
@@ -204,8 +204,8 @@ export function buildNotifications(args: {
         title: diffDays < 0 ? `${debt.name} lewat jatuh tempo` : `${debt.name} jatuh tempo ${diffDays === 0 ? "hari ini" : `${diffDays} hari lagi`}`,
         description:
           debt.debt_type === "hutang"
-            ? "Cek dan catat pembayaran biar status utangnya rapi."
-            : "Ingetin yang punya kewajiban bayar biar cashflow aman.",
+            ? "Periksa dan catat pembayaran agar status kewajiban tetap akurat."
+            : "Tindak lanjuti piutang agar arus kas tetap terjaga.",
         href: "/debts",
         tone: diffDays < 0 ? "danger" : "warning",
       });
@@ -215,7 +215,7 @@ export function buildNotifications(args: {
     notifications.push({
       id: "all-good",
       title: "Semua aman",
-      description: "Belum ada alert penting. Keuangan kamu lagi anteng sekarang.",
+      description: "Belum ada notifikasi penting. Kondisi keuangan saat ini relatif stabil.",
       href: "/dashboard",
       tone: "success",
     });

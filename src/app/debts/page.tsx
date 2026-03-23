@@ -24,14 +24,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/components/providers";
-import { addDebtPayment, createDebt, deleteDebt, getDebts, updateDebt, type Debt as DbDebt } from "@/lib/supabase";
+import { addDebtPayment, createDebt, deleteDebt, getCachedDebtsSnapshot, getDebts, updateDebt, type Debt as DbDebt } from "@/lib/supabase";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toNumber } from "@/lib/data-utils";
 
 export default function DebtsPage() {
   const { user } = useAuth();
-  const [debts, setDebts] = useState<DbDebt[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedDebts = user ? getCachedDebtsSnapshot(user.id) : [];
+  const [debts, setDebts] = useState<DbDebt[]>(cachedDebts);
+  const [loading, setLoading] = useState(!cachedDebts.length);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingDebt, setEditingDebt] = useState<DbDebt | null>(null);
@@ -51,9 +52,19 @@ export default function DebtsPage() {
     notes: "",
   });
 
+  useEffect(() => {
+    if (!user) return;
+
+    const snapshot = getCachedDebtsSnapshot(user.id);
+    if (snapshot.length) {
+      setDebts(snapshot);
+      setLoading(false);
+    }
+  }, [user]);
+
   const loadDebts = async () => {
     if (!user) return;
-    setLoading(true);
+    setLoading((prev) => (debts.length === 0 ? true : prev));
     setError("");
 
     try {
@@ -112,7 +123,7 @@ export default function DebtsPage() {
   const handleSave = async () => {
     if (!user) return;
     if (!form.name || !form.debtType || !form.totalAmount) {
-      window.alert("Nama, jenis, dan total amount wajib diisi ya.");
+      window.alert("Nama, jenis, dan total nominal wajib diisi.");
       return;
     }
 
@@ -162,7 +173,7 @@ export default function DebtsPage() {
 
   const handlePayment = async () => {
     if (!selectedDebt || !paymentAmount) {
-      window.alert("Isi jumlah pembayaran dulu ya.");
+      window.alert("Masukkan jumlah pembayaran terlebih dahulu.");
       return;
     }
 
@@ -274,7 +285,7 @@ export default function DebtsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Utang & Piutang</h1>
-            <p className="text-sm text-muted-foreground">Semua cicilan, pinjaman, dan piutang dicatet biar gak ada yang kelewat.</p>
+            <p className="text-sm text-muted-foreground">Kelola kewajiban dan piutang agar seluruh catatan tetap terpantau.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-xl" onClick={() => openCreateModal("piutang")}>Tambah piutang</Button>
@@ -310,14 +321,14 @@ export default function DebtsPage() {
         </div>
 
         {loading ? (
-          <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Lagi muat catatan utang/piutang...</CardContent></Card>
+          <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">Memuat data utang dan piutang...</CardContent></Card>
         ) : error ? (
           <Card><CardContent className="p-6 text-sm text-rose-700 dark:text-rose-200">{error}</CardContent></Card>
         ) : debts.length === 0 ? (
           <Card>
             <CardContent className="rounded-2xl border border-dashed border-border p-10 text-center">
               <p className="text-base font-semibold">Belum ada catatan utang atau piutang</p>
-              <p className="mt-2 text-sm text-muted-foreground">Akun baru wajar masih bersih. Tambah data kalau memang ada kewajiban atau tagihan yang perlu dipantau.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Belum ada catatan utang atau piutang yang tersimpan.</p>
             </CardContent>
           </Card>
         ) : (
@@ -360,7 +371,7 @@ export default function DebtsPage() {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{editingDebt ? "Edit data" : "Tambah hutang / piutang"}</DialogTitle>
-              <DialogDescription>Simpan data kewajiban atau tagihan yang perlu kamu pantau.</DialogDescription>
+              <DialogDescription>Simpan data kewajiban atau piutang untuk dipantau.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
@@ -435,7 +446,7 @@ export default function DebtsPage() {
                     <p className="mt-1">Jenis: {selectedDebt.debt_type === "hutang" ? "Hutang" : "Piutang"}</p>
                   </>
                 ) : (
-                  "Pilih data dulu ya."
+                  "Pilih data terlebih dahulu."
                 )}
               </div>
               <div className="space-y-2">

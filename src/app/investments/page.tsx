@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/components/providers";
-import { createInvestment, deleteInvestment, getInvestments, updateInvestment, type Investment as DbInvestment } from "@/lib/supabase";
+import { createInvestment, deleteInvestment, getCachedInvestmentsSnapshot, getInvestments, updateInvestment, type Investment as DbInvestment } from "@/lib/supabase";
 import { exportInvestmentReport } from "@/lib/export";
 import { mapInvestmentToUi, toNumber } from "@/lib/data-utils";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -42,8 +42,9 @@ const getInvestmentTypeInfo = (type: string) => INVESTMENT_TYPES.find((item) => 
 
 export default function InvestmentsPage() {
   const { user } = useAuth();
-  const [investments, setInvestments] = useState<DbInvestment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedInvestments = user ? getCachedInvestmentsSnapshot(user.id) : [];
+  const [investments, setInvestments] = useState<DbInvestment[]>(cachedInvestments);
+  const [loading, setLoading] = useState(!cachedInvestments.length);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<DbInvestment | null>(null);
@@ -56,9 +57,19 @@ export default function InvestmentsPage() {
     notes: "",
   });
 
+  useEffect(() => {
+    if (!user) return;
+
+    const snapshot = getCachedInvestmentsSnapshot(user.id);
+    if (snapshot.length) {
+      setInvestments(snapshot);
+      setLoading(false);
+    }
+  }, [user]);
+
   const loadInvestments = async () => {
     if (!user) return;
-    setLoading(true);
+    setLoading((prev) => (investments.length === 0 ? true : prev));
     setError("");
 
     try {
@@ -103,7 +114,7 @@ export default function InvestmentsPage() {
   const handleSave = async () => {
     if (!user) return;
     if (!form.name || !form.type || !form.initialValue || !form.currentValue || !form.purchaseDate) {
-      window.alert("Semua field utama investasi wajib diisi ya.");
+      window.alert("Seluruh data utama investasi wajib diisi.");
       return;
     }
 
@@ -154,7 +165,7 @@ export default function InvestmentsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold">Investasi</h1>
-            <p className="text-sm text-muted-foreground">Pantau portofolio, nilai sekarang, dan growth yang beneran dari akun kamu.</p>
+            <p className="text-sm text-muted-foreground">Pantau portofolio, nilai terkini, dan pertumbuhan investasi Anda.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" className="rounded-xl" onClick={() => exportInvestmentReport(investments.map(mapInvestmentToUi))} disabled={!investments.length}>
@@ -201,17 +212,17 @@ export default function InvestmentsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Portofolio investasi</CardTitle>
-            <CardDescription>Kalau akun masih baru, list ini bakal kosong sampai kamu nambah aset pertama.</CardDescription>
+            <CardDescription>Daftar investasi akan tampil setelah Anda menambahkan aset pertama.</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Lagi muat investasi...</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">Memuat investasi...</p>
             ) : error ? (
               <p className="rounded-xl bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-200">{error}</p>
             ) : investments.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border px-4 py-10 text-center">
                 <p className="text-base font-semibold">Belum ada investasi</p>
-                <p className="mt-2 text-sm text-muted-foreground">Akun baru gak boleh punya portofolio palsu. Tambah investasi kalau memang udah ada aset beneran.</p>
+                <p className="mt-2 text-sm text-muted-foreground">Belum ada data investasi yang tercatat.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -281,7 +292,7 @@ export default function InvestmentsPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{editingInvestment ? "Edit investasi" : "Tambah investasi"}</DialogTitle>
-              <DialogDescription>Simpan aset investasi kamu biar portofolio kebaca rapi.</DialogDescription>
+              <DialogDescription>Simpan data investasi agar portofolio tercatat dengan rapi.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">

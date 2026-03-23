@@ -7,9 +7,11 @@ import {
   supabase,
   Profile,
   isSupabaseConfigured,
+  prefetchUserAppData,
   supabaseConfigMessage,
 } from "@/lib/supabase";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { getCurrentMonth } from "@/lib/utils";
 
 // ============================================================
 // THEME CONTEXT
@@ -92,7 +94,7 @@ const DEMO_PROFILE: Profile = {
 
 const createSupabaseDisabledError = () =>
   new Error(
-    "Supabase belum dikonfigurasi. Isi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY dulu ya."
+    "Supabase belum dikonfigurasi. Lengkapi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY terlebih dahulu."
   );
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -101,7 +103,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -127,25 +128,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
           await fetchProfile(session.user.id);
         } else {
           setProfile(null);
         }
-        
+
+        const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+        const isAuthRoute = currentPath.startsWith("/auth");
+
         if (event === "SIGNED_OUT") {
           router.push("/auth/login");
-        } else if (!session && pathname?.startsWith("/dashboard")) {
+        } else if (!session && !isAuthRoute) {
           router.push("/auth/login");
         }
-        
+
         setLoading(false);
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [pathname, router]);
+  }, [router]);
+
+  useEffect(() => {
+    if (!user || !isSupabaseConfigured) return;
+
+    const month = getCurrentMonth();
+    const routesToPrefetch = [
+      "/dashboard",
+      "/transactions",
+      "/budgeting",
+      "/investments",
+      "/debts",
+      "/settings",
+    ];
+
+    routesToPrefetch.forEach((route) => {
+      router.prefetch(route);
+    });
+
+    prefetchUserAppData(user.id, month).catch((error) => {
+      console.error("Failed to prefetch app data", error);
+    });
+  }, [router, user]);
 
   const fetchProfile = async (userId: string) => {
     if (!isSupabaseConfigured) {
