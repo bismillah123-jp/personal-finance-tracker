@@ -12,6 +12,7 @@ import type {
   Transaction as UiTransaction,
   Wallet as UiWallet,
 } from "@/types";
+import { parseInvestmentNotes } from "@/lib/gold-investments";
 import { formatShortDate } from "@/lib/utils";
 
 export function toNumber(value: number | string | null | undefined): number {
@@ -65,6 +66,8 @@ export function mapBudgetToUi(
 }
 
 export function mapInvestmentToUi(investment: DbInvestment): UiInvestment {
+  const { userNotes } = parseInvestmentNotes(investment.notes);
+
   return {
     id: investment.id,
     name: investment.name,
@@ -72,7 +75,7 @@ export function mapInvestmentToUi(investment: DbInvestment): UiInvestment {
     initialValue: toNumber(investment.initial_value),
     currentValue: toNumber(investment.current_value),
     purchaseDate: investment.purchase_date,
-    notes: investment.notes,
+    notes: userNotes,
   };
 }
 

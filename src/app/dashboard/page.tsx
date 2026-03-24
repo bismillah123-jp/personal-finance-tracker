@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/providers";
 import { buildCashFlowSeries, mapBudgetToUi, mapTransactionToUi, mapWalletToUi, toNumber } from "@/lib/data-utils";
+import { enrichInvestmentsWithGoldPrice } from "@/lib/gold-investments";
+import { getGoldPrice, type GoldPriceData } from "@/lib/gold-price";
 import { getCachedDashboardSnapshot, getDashboardData, type Budget as DbBudget, type Debt as DbDebt, type Investment as DbInvestment, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
 import { formatCurrency, getCurrentMonth, getMonthName } from "@/lib/utils";
 
@@ -41,6 +43,7 @@ export default function DashboardPage() {
   const [debts, setDebts] = useState<DbDebt[]>(cachedDashboard?.debts ?? []);
   const [loading, setLoading] = useState(!cachedDashboard);
   const [error, setError] = useState("");
+  const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -80,12 +83,34 @@ export default function DashboardPage() {
     loadData();
   }, [user, currentMonth]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGoldData = async () => {
+      try {
+        const data = await getGoldPrice();
+        if (!cancelled) {
+          setGoldPrice(data);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+      }
+    };
+
+    loadGoldData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const enrichedInvestments = useMemo(() => enrichInvestmentsWithGoldPrice(investments, goldPrice), [investments, goldPrice]);
   const uiTransactions = useMemo(() => transactions.map(mapTransactionToUi), [transactions]);
   const uiBudgets = useMemo(() => budgets.map(mapBudgetToUi), [budgets]);
   const uiWallets = useMemo(() => wallets.map(mapWalletToUi), [wallets]);
   const cashFlowData = useMemo(() => buildCashFlowSeries(transactions, currentMonth), [transactions, currentMonth]);
 
-  const totalInvestmentValue = investments.reduce((sum, investment) => sum + toNumber(investment.current_value), 0);
+  const totalInvestmentValue = enrichedInvestments.reduce((sum, investment) => sum + investment.live_current_value, 0);
   const totalAssets = wallets.reduce((sum, wallet) => sum + Math.max(0, toNumber(wallet.balance)), 0) + totalInvestmentValue;
   const totalLiabilities = debts
     .filter((debt) => debt.debt_type === "hutang")
