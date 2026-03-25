@@ -548,7 +548,24 @@ export default function InvestmentsPage() {
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Nilai sekarang</Label>
-                      <Input type="text" value={liveGoldPreviewValue ? formatCurrency(liveGoldPreviewValue) : "Menunggu harga emas..."} readOnly />
+                      <Input
+                        type="text"
+                        value={
+                          goldPriceLoading
+                            ? "Memuat harga emas..."
+                            : goldPriceError
+                              ? "Harga emas gagal dimuat"
+                              : !toNumber(form.grams)
+                                ? "Masukkan berat emas dulu"
+                                : liveGoldPreviewValue
+                                  ? formatCurrency(liveGoldPreviewValue)
+                                  : "—"
+                        }
+                        readOnly
+                      />
+                      {goldPriceError && (
+                        <p className="text-xs text-red-500">{goldPriceError}</p>
+                      )}
                     </div>
                     <div className="space-y-2">
                       <Label>Investasi rutin per bulan</Label>
@@ -561,10 +578,34 @@ export default function InvestmentsPage() {
                     </div>
                   </div>
                   <div className="rounded-xl border border-dashed border-yellow-300 bg-yellow-50/60 p-3 text-sm text-yellow-900 dark:border-yellow-900 dark:bg-yellow-950/30 dark:text-yellow-100">
-                    <p className="font-medium">Preview emas live</p>
-                    <p className="mt-1">Nilai sekarang otomatis ikut harga emas API.</p>
-                    {estimatedMonthlyGoldGrams > 0 && (
-                      <p className="mt-1">Dengan budget {formatCurrency(toNumber(form.monthlyBudget))}/bulan, estimasinya dapat {estimatedMonthlyGoldGrams.toFixed(4)} gram per bulan.</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium">Preview emas live</p>
+                      {goldPrice && (
+                        <p className="text-xs opacity-70">{formatCurrency(goldPrice.gold)}/gram</p>
+                      )}
+                    </div>
+                    {goldPriceError ? (
+                      <div className="mt-2">
+                        <p className="text-red-600 dark:text-red-400">Gagal memuat harga emas: {goldPriceError}</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => loadGoldPrice(true)}
+                          disabled={goldPriceLoading}
+                        >
+                          {goldPriceLoading ? "Memuat..." : "Coba lagi"}
+                        </Button>
+                      </div>
+                    ) : goldPriceLoading ? (
+                      <p className="mt-1">Memuat harga emas...</p>
+                    ) : (
+                      <>
+                        <p className="mt-1">Nilai sekarang otomatis ikut harga emas API.</p>
+                        {estimatedMonthlyGoldGrams > 0 && (
+                          <p className="mt-1">Dengan budget {formatCurrency(toNumber(form.monthlyBudget))}/bulan, estimasinya dapat {estimatedMonthlyGoldGrams.toFixed(4)} gram per bulan.</p>
+                        )}
+                      </>
                     )}
                   </div>
                 </>
