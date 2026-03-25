@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, TrendingUp, Clock } from "lucide-react";
 import { getGoldPrice, refreshGoldPrice, formatLastUpdate, type GoldPriceData } from "@/lib/gold-price";
+import { formatCurrency } from "@/lib/utils";
 
 export function GoldPriceCard() {
   const [goldData, setGoldData] = useState<GoldPriceData | null>(null);
@@ -36,15 +37,6 @@ export function GoldPriceCard() {
   useEffect(() => {
     loadGoldPrice();
   }, []);
-
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("id-ID", {
-      style: "currency",
-      currency: "IDR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
 
   if (loading) {
     return (
@@ -95,24 +87,15 @@ export function GoldPriceCard() {
         <div className="space-y-3">
           {/* Gold Price */}
           <div>
-            <div className="text-2xl font-bold">{formatPrice(goldData.gold)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(goldData.gold)}</div>
             <p className="text-xs text-muted-foreground">per gram</p>
           </div>
 
-          {/* Other Metals */}
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t">
-            <div>
-              <p className="text-xs text-muted-foreground">Perak</p>
-              <p className="text-sm font-medium">{formatPrice(goldData.silver)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Platinum</p>
-              <p className="text-sm font-medium">{formatPrice(goldData.platinum)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Palladium</p>
-              <p className="text-sm font-medium">{formatPrice(goldData.palladium)}</p>
-            </div>
+          {/* Source Info */}
+          <div className="pt-2 border-t">
+            <p className="text-xs text-muted-foreground">
+              Sumber: {goldData.source}
+            </p>
           </div>
 
           {/* Last Update */}
