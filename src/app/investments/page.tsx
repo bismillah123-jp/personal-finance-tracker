@@ -132,13 +132,11 @@ export default function InvestmentsPage() {
     }
   };
 
-  const loadGoldPrice = async (forceRefresh = false) => {
-    setGoldPriceLoading(true);
-    setGoldPriceError("");
-
+  const loadGoldPrice = async () => {
     try {
-      const data = forceRefresh ? await refreshGoldPrice() : await getGoldPrice();
+      const data = await getGoldPrice();
       setGoldPrice(data);
+      setGoldPriceError("");
     } catch (loadError: any) {
       console.error(loadError);
       setGoldPriceError(loadError?.message || "Harga emas live belum tersedia.");
@@ -151,8 +149,11 @@ export default function InvestmentsPage() {
     loadInvestments();
   }, [user]);
 
+  // Auto-refresh gold price every 1 second
   useEffect(() => {
     loadGoldPrice();
+    const interval = setInterval(loadGoldPrice, 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const enrichedInvestments = useMemo(
@@ -334,10 +335,10 @@ export default function InvestmentsPage() {
                   : goldPriceError || "Belum bisa mengambil harga live, nilai tersimpan tetap dipakai sebagai cadangan."}
               </p>
             </div>
-            <Button variant="outline" className="gap-2 rounded-xl" onClick={() => loadGoldPrice(true)} disabled={goldPriceLoading}>
-              <RefreshCw className={`h-4 w-4 ${goldPriceLoading ? "animate-spin" : ""}`} />
-              Refresh harga emas
-            </Button>
+            <div className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5">
+              <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Auto-refresh 1s</span>
+            </div>
           </CardContent>
         </Card>
 
@@ -587,20 +588,9 @@ export default function InvestmentsPage() {
                       )}
                     </div>
                     {goldPriceError ? (
-                      <div className="mt-2">
-                        <p className="text-red-600 dark:text-red-400">Gagal memuat harga emas: {goldPriceError}</p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          onClick={() => loadGoldPrice(true)}
-                          disabled={goldPriceLoading}
-                        >
-                          {goldPriceLoading ? "Memuat..." : "Coba lagi"}
-                        </Button>
-                      </div>
+                      <p className="mt-1 text-red-600 dark:text-red-400 text-xs">Gagal memuat — auto-retry aktif...</p>
                     ) : goldPriceLoading ? (
-                      <p className="mt-1">Memuat harga emas...</p>
+                      <p className="mt-1 text-xs">Memuat harga emas...</p>
                     ) : (
                       <>
                         <p className="mt-1">Nilai sekarang otomatis ikut harga emas API.</p>

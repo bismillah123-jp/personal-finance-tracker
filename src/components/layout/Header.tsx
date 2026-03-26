@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bell,
   CreditCard,
   Loader2,
+  LogOut,
   Settings,
-  UserCircle2,
+  TrendingUp,
+
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,9 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAuth, useTheme } from "@/components/providers";
+import { useAuth, useTheme, usePageVisibility } from "@/components/providers";
 import { buildNotifications, type AppNotification } from "@/lib/data-utils";
-import { getBudgets, getDebts, getTransactions, getWallets } from "@/lib/supabase";
+import { getBudgets, getDebts, getTransactions, getWallets, isSupabaseConfigured } from "@/lib/supabase";
 import { getCurrentMonth } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -32,8 +34,15 @@ const toneClasses: Record<AppNotification["tone"], string> = {
   success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100",
 };
 
+const toneIcons: Record<AppNotification["tone"], string> = {
+  info: "💡",
+  warning: "⚠️",
+  danger: "🚨",
+  success: "✅",
+};
+
 export function Header() {
-  const { profile, user, signOut } = useAuth();
+  const { profile, user, signOut, reconnect } = useAuth();
   const { theme } = useTheme();
   const router = useRouter();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -41,101 +50,101 @@ export function Header() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(true);
 
-  useEffect(() => {
-    if (!user) return;
+  const loadNotifications = useCallback(async () => {
+    if (!user || !isSupabaseConfigured) {
+      setLoadingNotifications(false);
+      return;
+    }
 
-    const loadNotifications = async () => {
-      setLoadingNotifications(true);
-      try {
-        const month = getCurrentMonth();
-        const [wallets, transactions, budgets, debts] = await Promise.all([
-          getWallets(user.id),
-          getTransactions(user.id, { month }),
-          getBudgets(user.id, month),
-          getDebts(user.id),
-        ]);
+    setLoadingNotifications(true);
+    try {
+      const month = getCurrentMonth();
+      const [wallets, transactions, budgets, debts] = await Promise.all([
+        getWallets(user.id),
+        getTransactions(user.id, { month }),
+        getBudgets(user.id, month),
+        getDebts(user.id),
+      ]);
 
-        const expenseByCategory = transactions
-          .filter((transaction) => transaction.type === "expense")
-          .reduce<Record<string, number>>((acc, transaction) => {
-            acc[transaction.category] = (acc[transaction.category] ?? 0) + Number(transaction.amount);
-            return acc;
-          }, {});
+      const expenseByCategory = transactions
+        .filter((t) => t.type === "expense")
+        .reduce<Record<string, number>>((acc, t) => {
+          acc[t.category] = (acc[t.category] ?? 0) + Number(t.amount);
+          return acc;
+        }, {});
 
-        const budgetProgress = budgets.map((budget) => ({
-          ...budget,
-          spent: expenseByCategory[budget.category] ?? 0,
-        }));
+      const budgetProgress = budgets.map((b) => ({
+        ...b,
+        spent: expenseByCategory[b.category] ?? 0,
+      }));
 
-        setNotifications(
-          buildNotifications({
-            walletCount: wallets.length,
-            transactionsThisMonth: transactions,
-            budgetProgress,
-            debts,
-          }),
-        );
-      } catch (error) {
-        console.error("Failed to load notifications", error);
-        setNotifications([
-          {
-            id: "notif-error",
-            title: "Notif belum bisa dimuat",
-            description: "Silakan muat ulang halaman lalu coba kembali.",
-            href: "/dashboard",
-            tone: "warning",
-          },
-        ]);
-      } finally {
-        setLoadingNotifications(false);
-      }
-    };
-
-    loadNotifications();
+      setNotifications(
+        buildNotifications({
+          walletCount: wallets.length,
+          transactionsThisMonth: transactions,
+          budgetProgress,
+          debts,
+        }),
+      );
+    } catch (error) {
+      console.error("Failed to load notifications", error);
+      setNotifications([{
+        id: "notif-error",
+        title: "Notifikasi gagal dimuat",
+        description: "Silakan refresh halaman.",
+        href: "/dashboard",
+        tone: "warning",
+      }]);
+    } finally {
+      setLoadingNotifications(false);
+    }
   }, [user]);
 
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications]);
+
+  // Re-load notifications when tab regains focus
+  usePageVisibility(useCallback(() => {
+    loadNotifications();
+  }, [loadNotifications]));
+
   const unreadCount = useMemo(
-    () => notifications.filter((notification) => notification.tone !== "success").length,
+    () => notifications.filter((n) => n.tone !== "success").length,
     [notifications],
   );
 
   const getInitials = (name: string) =>
-    name
-      .split(" ")
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
+    name.split(" ").map((p) => p[0]).join("").toUpperCase().slice(0, 2);
 
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 lg:px-6">
+        <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6">
           <div className="flex min-w-0 items-center gap-2 lg:hidden">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600">
               <span className="text-xs font-extrabold text-white">FT</span>
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold">FinTrack</p>
-              <p className="truncate text-[11px] text-muted-foreground">Personal Finance Tracker</p>
             </div>
           </div>
 
           <div className="hidden lg:block" />
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <ThemeToggle />
 
             <Button
               variant="ghost"
               size="icon"
-              className="relative rounded-xl"
+              className="relative rounded-xl h-9 w-9"
               onClick={() => setShowNotifications(true)}
-              aria-label="Buka notifikasi"
+              aria-label="Notifikasi"
             >
-              <Bell className="h-5 w-5" />
+              <Bell className="h-[18px] w-[18px]" />
               {unreadCount > 0 && (
-                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
                   {Math.min(unreadCount, 9)}
                 </span>
               )}
@@ -144,48 +153,55 @@ export function Header() {
             <button
               type="button"
               onClick={() => setShowAccountMenu(true)}
-              className="flex items-center gap-2 rounded-2xl border border-border bg-card px-2.5 py-1.5 transition hover:border-primary/30 hover:bg-accent/40"
-              aria-label="Buka menu akun"
+              className="flex items-center gap-2 rounded-2xl border border-border bg-card px-2 py-1.5 transition hover:border-primary/30 hover:bg-accent/40"
+              aria-label="Menu akun"
             >
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-xs font-bold text-white shadow-md">
+              <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-[10px] sm:text-xs font-bold text-white shadow-md">
                 {profile?.full_name
                   ? getInitials(profile.full_name)
                   : profile?.email?.[0]?.toUpperCase() || "U"}
               </div>
-              <div className="hidden max-w-[140px] min-w-0 text-left sm:block">
-                <p className="truncate text-sm font-semibold">{profile?.full_name || "Akun"}</p>
-                <p className="truncate text-xs text-muted-foreground">{profile?.email}</p>
+              <div className="hidden max-w-[120px] min-w-0 text-left sm:block">
+                <p className="truncate text-sm font-semibold leading-tight">{profile?.full_name || "Akun"}</p>
+                <p className="truncate text-[11px] text-muted-foreground leading-tight">{profile?.email}</p>
               </div>
             </button>
           </div>
         </div>
       </header>
 
+      {/* Notifications Dialog */}
       <Dialog open={showNotifications} onOpenChange={setShowNotifications}>
-        <DialogContent className="max-w-lg sm:max-w-xl">
+        <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Notifikasi & insight</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              Notifikasi
+            </DialogTitle>
             <DialogDescription>
-              Ringkasan informasi penting dari akun keuangan Anda.
+              {unreadCount > 0 ? `${unreadCount} pemberitahuan penting` : "Tidak ada pemberitahuan"}
             </DialogDescription>
           </DialogHeader>
 
           {loadingNotifications ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Memuat pembaruan...
+              Memuat...
             </div>
           ) : (
-            <div className="space-y-3">
-              {notifications.map((notification) => (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {notifications.map((n) => (
                 <Link
-                  key={notification.id}
-                  href={notification.href}
+                  key={n.id}
+                  href={n.href}
                   onClick={() => setShowNotifications(false)}
-                  className={`block rounded-2xl border px-4 py-3 transition hover:scale-[0.99] ${toneClasses[notification.tone]}`}
+                  className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 transition hover:opacity-80 ${toneClasses[n.tone]}`}
                 >
-                  <p className="text-sm font-semibold leading-snug">{notification.title}</p>
-                  <p className="mt-1 text-sm leading-relaxed opacity-90">{notification.description}</p>
+                  <span className="text-base mt-0.5 shrink-0">{toneIcons[n.tone]}</span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold leading-snug">{n.title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed opacity-80">{n.description}</p>
+                  </div>
                 </Link>
               ))}
             </div>
@@ -193,68 +209,56 @@ export function Header() {
         </DialogContent>
       </Dialog>
 
+      {/* Account Menu Dialog — cleaned up layout */}
       <Dialog open={showAccountMenu} onOpenChange={setShowAccountMenu}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-sm sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Kelola akun</DialogTitle>
-            <DialogDescription>
-              Semua shortcut penting buat profil, dompet, dan pengaturan akun ada di sini.
-            </DialogDescription>
+            <DialogTitle>Akun Saya</DialogTitle>
           </DialogHeader>
 
-          <div className="rounded-2xl border border-border bg-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold text-white">
-                {profile?.full_name
-                  ? getInitials(profile.full_name)
-                  : profile?.email?.[0]?.toUpperCase() || "U"}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-base font-semibold">{profile?.full_name || "Akun"}</p>
-                <p className="truncate text-sm text-muted-foreground">{profile?.email}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Tema aktif: {theme}</p>
-              </div>
+          {/* Profile card */}
+          <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 p-3 border border-border">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold text-white">
+              {profile?.full_name ? getInitials(profile.full_name) : profile?.email?.[0]?.toUpperCase() || "U"}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-base font-semibold">{profile?.full_name || "User"}</p>
+              <p className="truncate text-xs text-muted-foreground">{profile?.email}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Button asChild variant="outline" className="justify-start rounded-xl">
-              <Link href="/settings" onClick={() => setShowAccountMenu(false)}>
-                <Settings className="mr-2 h-4 w-4" />
-                Profil & preferensi
+          {/* Quick links */}
+          <div className="space-y-1.5">
+            {[
+              { href: "/settings", icon: Settings, label: "Pengaturan" },
+              { href: "/settings#wallets", icon: Wallet, label: "Kelola Dompet" },
+              { href: "/investments", icon: TrendingUp, label: "Investasi" },
+              { href: "/debts", icon: CreditCard, label: "Utang & Piutang" },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setShowAccountMenu(false)}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-accent"
+              >
+                <item.icon className="h-4 w-4 text-muted-foreground" />
+                {item.label}
               </Link>
-            </Button>
-            <Button asChild variant="outline" className="justify-start rounded-xl">
-              <Link href="/settings#wallets" onClick={() => setShowAccountMenu(false)}>
-                <Wallet className="mr-2 h-4 w-4" />
-                Kelola dompet
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="justify-start rounded-xl">
-              <Link href="/settings#account-management" onClick={() => setShowAccountMenu(false)}>
-                <UserCircle2 className="mr-2 h-4 w-4" />
-                Pengelola akun
-              </Link>
-            </Button>
-            <Button asChild variant="outline" className="justify-start rounded-xl">
-              <Link href="/debts" onClick={() => setShowAccountMenu(false)}>
-                <CreditCard className="mr-2 h-4 w-4" />
-                Lihat utang & piutang
-              </Link>
-            </Button>
+            ))}
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button
-              variant="destructive"
+          {/* Logout */}
+          <div className="border-t border-border pt-3">
+            <button
               onClick={async () => {
                 await signOut();
                 setShowAccountMenu(false);
-                router.push("/auth/login");
               }}
+              className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive transition hover:bg-destructive/5"
             >
-              Keluar
-            </Button>
+              <LogOut className="h-4 w-4" />
+              Keluar dari Akun
+            </button>
           </div>
         </DialogContent>
       </Dialog>
