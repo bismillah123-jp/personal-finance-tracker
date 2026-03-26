@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -24,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/components/providers";
-import { createBudget, deleteBudget, getBudgetProgress, getCachedBudgetProgressSnapshot, updateBudget } from "@/lib/supabase";
+import { createBudget, deleteBudget, getBudgetProgress, getCachedBudgetProgressSnapshot, updateBudget, isSupabaseConfigured } from "@/lib/supabase";
 import { exportBudgetReport } from "@/lib/export";
 import { mapBudgetToUi, toNumber } from "@/lib/data-utils";
 import { EXPENSE_CATEGORIES } from "@/types";
@@ -52,17 +53,17 @@ const getCategoryInfo = (categoryId: string) =>
   };
 
 export default function BudgetingPage() {
-  const { user } = useAuth();
+  const { user, currency, locale } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
   const cachedBudgets = user ? getCachedBudgetProgressSnapshot(user.id, currentMonth) : [];
   const [budgets, setBudgets] = useState<BudgetProgressItem[]>(cachedBudgets as BudgetProgressItem[]);
-  const [loading, setLoading] = useState(!cachedBudgets.length);
+  const [loading, setLoading] = useState(!cachedBudgets.length && isSupabaseConfigured);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetProgressItem | null>(null);
   const [form, setForm] = useState({ category: "", limit: "" });
 
-  const monthLabel = getMonthName(currentMonth);
+  const monthLabel = getMonthName(currentMonth, locale);
 
   useEffect(() => {
     if (!user) return;
@@ -208,7 +209,7 @@ export default function BudgetingPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total Budget</p>
-                  <p className="break-words text-lg font-bold">{formatCurrency(totalBudget)}</p>
+                  <p className="break-words text-lg font-bold">{formatCurrency(totalBudget, currency, locale)}</p>
                 </div>
               </div>
             </CardContent>
@@ -221,7 +222,7 @@ export default function BudgetingPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Total Terpakai</p>
-                  <p className="break-words text-lg font-bold">{formatCurrency(totalSpent)}</p>
+                  <p className="break-words text-lg font-bold">{formatCurrency(totalSpent, currency, locale)}</p>
                 </div>
               </div>
             </CardContent>
@@ -234,7 +235,7 @@ export default function BudgetingPage() {
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Sisa Budget</p>
-                  <p className={`break-words text-lg font-bold ${totalRemaining >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{formatCurrency(totalRemaining)}</p>
+                  <p className={`break-words text-lg font-bold ${totalRemaining >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{formatCurrency(totalRemaining, currency, locale)}</p>
                 </div>
               </div>
             </CardContent>
@@ -261,7 +262,7 @@ export default function BudgetingPage() {
           </CardHeader>
           <CardContent>
             <div className="mb-3 flex items-center justify-between gap-3 text-sm">
-              <span>{formatCurrency(totalSpent)} terpakai</span>
+              <span>{formatCurrency(totalSpent, currency, locale)} terpakai</span>
               <span className="font-semibold">{totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0}%</span>
             </div>
             <Progress value={totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0} className="h-3" />
@@ -299,7 +300,7 @@ export default function BudgetingPage() {
                           </div>
                           <div className="min-w-0">
                             <p className="truncate font-semibold">{category.label}</p>
-                            <p className="text-xs text-muted-foreground">{formatCurrency(toNumber(budget.spent))} / {formatCurrency(toNumber(budget.limit_amount))}</p>
+                            <p className="text-xs text-muted-foreground">{formatCurrency(toNumber(budget.spent), currency, locale)} / {formatCurrency(toNumber(budget.limit_amount), currency, locale)}</p>
                           </div>
                         </div>
                         <div className="flex shrink-0 gap-2">
@@ -319,7 +320,7 @@ export default function BudgetingPage() {
                           indicatorClassName={isOver ? "bg-rose-500" : isWarning ? "bg-amber-500" : "bg-emerald-500"}
                         />
                         <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-                          <span className="break-words">{isOver ? `Lebih ${formatCurrency(toNumber(budget.spent) - toNumber(budget.limit_amount))}` : `${formatCurrency(toNumber(budget.limit_amount) - toNumber(budget.spent))} tersisa`}</span>
+                          <span className="break-words">{isOver ? `Lebih ${formatCurrency(toNumber(budget.spent) - toNumber(budget.limit_amount), currency, locale)}` : `${formatCurrency(toNumber(budget.limit_amount) - toNumber(budget.spent), currency, locale)} tersisa`}</span>
                           <span className="font-semibold">{Math.round(percentage)}%</span>
                         </div>
                       </div>
@@ -355,7 +356,7 @@ export default function BudgetingPage() {
               </div>
               <div className="space-y-2">
                 <Label>Batas budget</Label>
-                <Input type="number" placeholder="0" value={form.limit} onChange={(event) => setForm((prev) => ({ ...prev, limit: event.target.value }))} />
+                <CurrencyInput value={form.limit} onValueChange={(raw) => setForm((prev) => ({ ...prev, limit: String(raw) }))} />
               </div>
             </div>
             <DialogFooter>

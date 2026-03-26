@@ -17,7 +17,7 @@ import { useAuth } from "@/components/providers";
 import { buildCashFlowSeries, mapBudgetToUi, mapTransactionToUi, mapWalletToUi, toNumber } from "@/lib/data-utils";
 import { enrichInvestmentsWithGoldPrice } from "@/lib/gold-investments";
 import { getGoldPrice, type GoldPriceData } from "@/lib/gold-price";
-import { getCachedDashboardSnapshot, getDashboardData, type Budget as DbBudget, type Debt as DbDebt, type Investment as DbInvestment, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
+import { getCachedDashboardSnapshot, getDashboardData, type Budget as DbBudget, type Debt as DbDebt, type Investment as DbInvestment, type Transaction as DbTransaction, type Wallet as DbWallet, isSupabaseConfigured } from "@/lib/supabase";
 import { formatCurrency, getCurrentMonth, getMonthName } from "@/lib/utils";
 
 const CashFlowChart = dynamic(
@@ -33,7 +33,7 @@ const CashFlowChart = dynamic(
 );
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, currency, locale } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
   const cachedDashboard = user ? getCachedDashboardSnapshot(user.id, currentMonth) : null;
   const [wallets, setWallets] = useState<DbWallet[]>(cachedDashboard?.wallets ?? []);
@@ -41,7 +41,7 @@ export default function DashboardPage() {
   const [budgets, setBudgets] = useState<Array<DbBudget & { spent?: number }>>(cachedDashboard?.budgets ?? []);
   const [investments, setInvestments] = useState<DbInvestment[]>(cachedDashboard?.investments ?? []);
   const [debts, setDebts] = useState<DbDebt[]>(cachedDashboard?.debts ?? []);
-  const [loading, setLoading] = useState(!cachedDashboard);
+  const [loading, setLoading] = useState(!cachedDashboard && isSupabaseConfigured);
   const [error, setError] = useState("");
   const [goldPrice, setGoldPrice] = useState<GoldPriceData | null>(null);
 
@@ -60,7 +60,7 @@ export default function DashboardPage() {
   }, [currentMonth, user]);
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user || !isSupabaseConfigured) return;
     setLoading((prev) => (wallets.length === 0 && transactions.length === 0 && budgets.length === 0 && investments.length === 0 && debts.length === 0 ? true : prev));
     setError("");
 
@@ -122,7 +122,7 @@ export default function DashboardPage() {
     .filter((transaction) => transaction.type === "expense")
     .reduce((sum, transaction) => sum + toNumber(transaction.amount), 0);
   const netWorth = totalAssets - totalLiabilities;
-  const monthLabel = getMonthName(currentMonth);
+  const monthLabel = getMonthName(currentMonth, locale);
   const hasData = wallets.length > 0 || transactions.length > 0 || budgets.length > 0 || investments.length > 0 || debts.length > 0;
 
   return (
@@ -219,28 +219,28 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label="Total Aset"
-                value={formatCurrency(totalAssets)}
+                value={formatCurrency(totalAssets, currency, locale)}
                 icon={<Landmark className="h-5 w-5" />}
                 iconBg="bg-blue-50 dark:bg-blue-950"
                 iconColor="text-blue-600 dark:text-blue-400"
               />
               <MetricCard
                 label="Total Kewajiban"
-                value={formatCurrency(totalLiabilities)}
+                value={formatCurrency(totalLiabilities, currency, locale)}
                 icon={<Wallet className="h-5 w-5" />}
                 iconBg="bg-rose-50 dark:bg-rose-950"
                 iconColor="text-rose-600 dark:text-rose-400"
               />
               <MetricCard
                 label="Pemasukan Bulan Ini"
-                value={formatCurrency(monthlyIncome)}
+                value={formatCurrency(monthlyIncome, currency, locale)}
                 icon={<TrendingUp className="h-5 w-5" />}
                 iconBg="bg-emerald-50 dark:bg-emerald-950"
                 iconColor="text-emerald-600 dark:text-emerald-400"
               />
               <MetricCard
                 label="Pengeluaran Bulan Ini"
-                value={formatCurrency(monthlyExpense)}
+                value={formatCurrency(monthlyExpense, currency, locale)}
                 icon={<TrendingDown className="h-5 w-5" />}
                 iconBg="bg-amber-50 dark:bg-amber-950"
                 iconColor="text-amber-600 dark:text-amber-400"
@@ -249,7 +249,7 @@ export default function DashboardPage() {
 
             <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-600 p-6 text-white shadow-xl">
               <p className="text-sm text-white/75">Net worth</p>
-              <p className="mt-2 break-words text-3xl font-extrabold tracking-tight">{formatCurrency(netWorth)}</p>
+              <p className="mt-2 break-words text-3xl font-extrabold tracking-tight">{formatCurrency(netWorth, currency, locale)}</p>
               <p className="mt-1 text-xs text-white/70">{wallets.length} dompet • {investments.length} investasi • {debts.length} catatan utang/piutang</p>
             </div>
 
@@ -292,7 +292,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <p className={`mt-4 break-words text-lg font-bold ${wallet.balance < 0 ? "text-rose-600" : "text-foreground"}`}>
-                        {formatCurrency(wallet.balance)}
+                        {formatCurrency(wallet.balance, currency, locale)}
                       </p>
                     </div>
                   ))}

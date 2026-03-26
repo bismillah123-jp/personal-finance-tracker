@@ -1,82 +1,64 @@
 "use client";
 
-import * as React from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import { useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/components/providers";
 import { formatCurrency } from "@/lib/utils";
-import { EXPENSE_CATEGORIES, Transaction } from "@/types";
-import { cn } from "@/lib/utils";
+import { EXPENSE_CATEGORIES, type Transaction } from "@/types";
 
-interface CategoryBreakdownProps {
-  transactions: Transaction[];
-  className?: string;
-}
+export function CategoryBreakdown({ transactions }: { transactions: Transaction[] }) {
+  const { currency, locale } = useAuth();
 
-export function CategoryBreakdown({ transactions, className }: CategoryBreakdownProps) {
-  const expenseMap = new Map<string, number>();
-  let totalExpense = 0;
+  const categoryData = useMemo(() => {
+    const expensesByCategory: Record<string, number> = {};
+    transactions
+      .filter((t) => t.type === "expense")
+      .forEach((t) => {
+        expensesByCategory[t.category] = (expensesByCategory[t.category] || 0) + t.amount;
+      });
 
-  transactions
-    .filter((t) => t.type === "expense")
-    .forEach((t) => {
-      expenseMap.set(t.category, (expenseMap.get(t.category) ?? 0) + t.amount);
-      totalExpense += t.amount;
-    });
-
-  const sortedCategories = Array.from(expenseMap.entries())
-    .sort(([, a], [, b]) => b - a)
-    .map(([catId, amount]) => {
-      const cat =
-        EXPENSE_CATEGORIES.find((c) => c.id === catId) ?? {
-          id: catId,
-          label: catId,
-          icon: "📦",
-          color: "#AEB6BF",
+    return Object.entries(expensesByCategory)
+      .map(([id, amount]) => {
+        const cat = EXPENSE_CATEGORIES.find((c) => c.id === id);
+        return {
+          id,
+          label: cat?.label || id,
+          icon: cat?.icon || "📦",
+          color: cat?.color || "#888",
+          amount,
         };
-      return {
-        ...cat,
-        amount,
-        percentage: totalExpense > 0 ? (amount / totalExpense) * 100 : 0,
-      };
-    });
+      })
+      .sort((a, b) => b.amount - a.amount);
+  }, [transactions]);
+
+  const total = categoryData.reduce((sum, c) => sum + c.amount, 0);
 
   return (
-    <Card className={cn("overflow-hidden", className)}>
+    <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Pengeluaran per Kategori</CardTitle>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {formatCurrency(totalExpense)} total bulan ini
-        </p>
+        <CardTitle className="text-base">Pengeluaran per kategori</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {sortedCategories.length === 0 ? (
-          <div className="py-6 text-center">
-            <p className="text-sm text-muted-foreground">Belum ada data pengeluaran</p>
-          </div>
+      <CardContent className="space-y-2">
+        {categoryData.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">Belum ada pengeluaran bulan ini.</p>
         ) : (
-          sortedCategories.slice(0, 6).map((cat) => (
-            <div key={cat.id} className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-base">{cat.icon}</span>
-                  <span className="text-sm font-medium text-foreground">{cat.label}</span>
+          categoryData.map((cat) => {
+            const pct = total > 0 ? (cat.amount / total) * 100 : 0;
+            return (
+              <div key={cat.id} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base">{cat.icon}</span>
+                    <span className="text-sm font-medium truncate">{cat.label}</span>
+                  </div>
+                  <span className="text-sm font-semibold whitespace-nowrap">{formatCurrency(cat.amount, currency, locale)}</span>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm font-bold text-foreground">
-                    {formatCurrency(cat.amount)}
-                  </span>
-                  <span className="text-xs text-muted-foreground ml-1.5">
-                    {cat.percentage.toFixed(0)}%
-                  </span>
+                <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: cat.color }} />
                 </div>
               </div>
-              <Progress
-                value={cat.percentage}
-                indicatorClassName="rounded-full"
-                className="h-2 rounded-full"
-              />
-            </div>
-          ))
+            );
+          })
         )}
       </CardContent>
     </Card>

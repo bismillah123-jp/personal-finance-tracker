@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { useAuth } from "@/components/providers";
-import { deleteTransaction, getCachedTransactionsSnapshot, getCachedWalletsSnapshot, getTransactions, getWallets, type Transaction as DbTransaction, type Wallet as DbWallet } from "@/lib/supabase";
+import { deleteTransaction, getCachedTransactionsSnapshot, getCachedWalletsSnapshot, getTransactions, getWallets, type Transaction as DbTransaction, type Wallet as DbWallet, isSupabaseConfigured } from "@/lib/supabase";
 import { exportToCSV, exportToPDF } from "@/lib/export";
 import { mapTransactionToUi, mapWalletToUi, toNumber } from "@/lib/data-utils";
 import { formatCurrency, formatDate, getCurrentMonth, getMonthName } from "@/lib/utils";
@@ -50,20 +50,20 @@ const getCategoryInfo = (categoryId: string, type: "income" | "expense") => {
 };
 
 export default function TransactionsPage() {
-  const { user } = useAuth();
+  const { user, currency, locale } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(getCurrentMonth());
   const cachedTransactions = user ? getCachedTransactionsSnapshot(user.id, { month: currentMonth }) : [];
   const cachedWallets = user ? getCachedWalletsSnapshot(user.id) : [];
   const [transactions, setTransactions] = useState<DbTransaction[]>(cachedTransactions);
   const [wallets, setWallets] = useState<DbWallet[]>(cachedWallets);
-  const [loading, setLoading] = useState(!(cachedTransactions.length || cachedWallets.length));
+  const [loading, setLoading] = useState(!(cachedTransactions.length || cachedWallets.length) && isSupabaseConfigured);
   const [error, setError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "income" | "expense">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [editingTransaction, setEditingTransaction] = useState<DbTransaction | null>(null);
 
-  const monthLabel = getMonthName(currentMonth);
+  const monthLabel = getMonthName(currentMonth, locale);
 
   useEffect(() => {
     if (!user) return;
@@ -79,7 +79,7 @@ export default function TransactionsPage() {
   }, [currentMonth, user]);
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user || !isSupabaseConfigured) return;
     setLoading((prev) => (transactions.length === 0 && wallets.length === 0 ? true : prev));
     setError("");
 
@@ -195,20 +195,20 @@ export default function TransactionsPage() {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total Pemasukan</p>
-              <p className="mt-1 break-words text-xl font-bold text-emerald-600">{formatCurrency(totalIncome)}</p>
+              <p className="mt-1 break-words text-xl font-bold text-emerald-600">{formatCurrency(totalIncome, currency, locale)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total Pengeluaran</p>
-              <p className="mt-1 break-words text-xl font-bold text-rose-600">{formatCurrency(totalExpense)}</p>
+              <p className="mt-1 break-words text-xl font-bold text-rose-600">{formatCurrency(totalExpense, currency, locale)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Saldo Bulan Ini</p>
               <p className={`mt-1 break-words text-xl font-bold ${balance >= 0 ? "text-primary" : "text-rose-600"}`}>
-                {formatCurrency(balance)}
+                {formatCurrency(balance, currency, locale)}
               </p>
             </CardContent>
           </Card>
@@ -309,7 +309,7 @@ export default function TransactionsPage() {
                         <div className="min-w-0">
                           <p className="break-words text-sm font-semibold sm:text-base">{transaction.note || category.label}</p>
                           <p className="mt-1 break-words text-xs text-muted-foreground sm:text-sm">
-                            {category.label} • {formatDate(transaction.date)}
+                            {category.label} • {formatDate(transaction.date, locale)}
                           </p>
                         </div>
                       </div>
@@ -321,7 +321,7 @@ export default function TransactionsPage() {
                           ) : (
                             <ArrowDownRight className="mr-1 inline h-4 w-4" />
                           )}
-                          {formatCurrency(toNumber(transaction.amount))}
+                          {formatCurrency(toNumber(transaction.amount), currency, locale)}
                         </p>
                         <div className="flex flex-wrap gap-2">
                           <Button

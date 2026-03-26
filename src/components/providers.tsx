@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import {
   supabase,
@@ -9,6 +9,7 @@ import {
   isSupabaseConfigured,
   prefetchUserAppData,
   supabaseConfigMessage,
+  clearLocalQueryCache,
 } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import { getCurrentMonth } from "@/lib/utils";
@@ -72,6 +73,8 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  currency: string;
+  locale: string;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -103,6 +106,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+
+  const currency = profile?.currency || "IDR";
+  const locale = profile?.locale || "id-ID";
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -204,16 +210,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
       return { error: createSupabaseDisabledError() };
     }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error };
-  };
+  }, []);
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = useCallback(async (email: string, password: string, fullName: string) => {
     if (!isSupabaseConfigured) {
       return { error: createSupabaseDisabledError() };
     }
@@ -226,9 +232,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return { error };
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     if (!isSupabaseConfigured) {
       setUser(null);
       setSession(null);
@@ -238,10 +244,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await supabase.auth.signOut();
+    clearLocalQueryCache();
     router.push("/auth/login");
-  };
+  }, [router]);
 
-  const updateProfileHandler = async (updates: Partial<Profile>) => {
+  const updateProfileHandler = useCallback(async (updates: Partial<Profile>) => {
     if (!isSupabaseConfigured) {
       setProfile(prev =>
         prev
@@ -259,25 +266,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .eq("id", user.id);
     
     if (!error) {
+      // Immediately update local profile state so currency/locale changes take effect
       setProfile(prev => prev ? { ...prev, ...updates } : null);
+      // Clear query cache so stale data doesn't show wrong formats
+      clearLocalQueryCache();
     }
     
     return { error };
-  };
+  }, [user]);
+
+  const contextValue = useMemo(() => ({
+    user,
+    session,
+    profile,
+    loading,
+    currency,
+    locale,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile: updateProfileHandler,
+  }), [user, session, profile, loading, currency, locale, signIn, signUp, signOut, updateProfileHandler]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        profile,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        updateProfile: updateProfileHandler
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
@@ -300,7 +312,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!loading && !user && isSupabaseConfigured) {
       router.push("/auth/login");
     }
   }, [user, loading, router]);
@@ -313,7 +325,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) {
+  if (!user && isSupabaseConfigured) {
     return null;
   }
 

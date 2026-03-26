@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Select,
   SelectContent,
@@ -67,6 +68,7 @@ export function TransactionForm({
   const [wallets, setWallets] = useState<WalletOption[]>([]);
   const [error, setError] = useState("");
   const [type, setType] = useState<"income" | "expense">(initialData?.type || defaultType);
+  const [amountRaw, setAmountRaw] = useState(initialData?.amount || 0);
 
   const {
     register,
@@ -128,6 +130,7 @@ export function TransactionForm({
 
     if (!isSupabaseConfigured) {
       reset();
+      setAmountRaw(0);
       onSuccess?.();
       return;
     }
@@ -142,6 +145,11 @@ export function TransactionForm({
       return;
     }
 
+    if (amountRaw <= 0) {
+      setError("Jumlah harus lebih dari 0.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -149,7 +157,7 @@ export function TransactionForm({
         user_id: user.id,
         wallet_id: data.walletId || undefined,
         type,
-        amount: Number(data.amount),
+        amount: amountRaw,
         category: data.category,
         date: data.date,
         note: data.note || undefined,
@@ -168,6 +176,7 @@ export function TransactionForm({
         date: format(new Date(), "yyyy-MM-dd"),
         note: "",
       });
+      setAmountRaw(0);
       onSuccess?.();
     } catch (submitError: any) {
       console.error("Error saving transaction:", submitError);
@@ -181,7 +190,7 @@ export function TransactionForm({
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 py-2">
       {!isSupabaseConfigured && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-800 dark:text-amber-200">
-          Mode demo aktif — {supabaseConfigMessage} Transaksi yang dikirim dari formulir ini tidak disimpan secara permanen.
+          Mode demo aktif — {supabaseConfigMessage}
         </div>
       )}
 
@@ -224,39 +233,34 @@ export function TransactionForm({
 
       <div className="space-y-2">
         <Label htmlFor="amount">Jumlah</Label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">Rp</span>
-          <Input
-            id="amount"
-            type="number"
-            inputMode="decimal"
-            placeholder="0"
-            className="h-12 pl-10 text-base font-semibold sm:text-lg"
-            {...register("amount", {
-              required: "Jumlah harus diisi",
-              min: { value: 1, message: "Jumlah minimal 1" },
-            })}
-          />
-        </div>
-        {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
+        <CurrencyInput
+          value={String(amountRaw || "")}
+          onValueChange={(raw) => {
+            setAmountRaw(raw);
+            setValue("amount", String(raw));
+          }}
+          className="h-12 text-base font-semibold sm:text-lg"
+          placeholder="0"
+        />
+        {amountRaw <= 0 && errors.amount && <p className="text-xs text-destructive">Jumlah harus diisi</p>}
       </div>
 
       <div className="space-y-2">
         <Label>Kategori</Label>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-4 gap-2">
           {categories.map((category) => (
             <button
               key={category.id}
               type="button"
               onClick={() => setValue("category", category.id)}
-              className={`flex min-h-[78px] flex-col items-center justify-center gap-1 rounded-xl border p-2 text-center transition-all ${
+              className={`flex min-h-[70px] flex-col items-center justify-center gap-1 rounded-xl border p-1.5 text-center transition-all ${
                 selectedCategory === category.id
-                  ? "border-primary bg-primary/5"
+                  ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                   : "border-border hover:border-muted-foreground/30"
               }`}
             >
-              <span className="text-xl">{category.icon}</span>
-              <span className="line-clamp-2 text-[10px] font-medium leading-tight sm:text-xs">
+              <span className="text-lg">{category.icon}</span>
+              <span className="line-clamp-2 text-[9px] font-medium leading-tight sm:text-xs">
                 {category.label}
               </span>
             </button>
@@ -270,7 +274,7 @@ export function TransactionForm({
         <div className="space-y-2">
           <Label htmlFor="walletId">Dompet</Label>
           <Select value={selectedWallet} onValueChange={(value) => setValue("walletId", value)}>
-            <SelectTrigger>
+            <SelectTrigger className="rounded-xl">
               <SelectValue placeholder={wallets.length ? "Pilih dompet" : "Belum ada dompet"} />
             </SelectTrigger>
             <SelectContent>
@@ -290,7 +294,7 @@ export function TransactionForm({
           <Input
             id="date"
             type="date"
-            className="h-10"
+            className="h-10 rounded-xl"
             {...register("date", { required: "Tanggal harus diisi" })}
           />
           {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
@@ -302,21 +306,21 @@ export function TransactionForm({
         <Textarea
           id="note"
           placeholder="Tambahkan catatan..."
-          className="min-h-[84px] resize-none"
+          className="min-h-[72px] resize-none rounded-xl"
           {...register("note")}
         />
       </div>
 
-      <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+      <div className="flex flex-col gap-2 pt-2 sm:flex-row">
         {onCancel && (
-          <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
+          <Button type="button" variant="outline" className="flex-1 rounded-xl" onClick={onCancel}>
             Batal
           </Button>
         )}
         <Button
           type="submit"
           variant={type === "income" ? "income" : "expense"}
-          className="flex-1"
+          className="flex-1 rounded-xl"
           disabled={loading || saveDisabled}
         >
           {loading ? (

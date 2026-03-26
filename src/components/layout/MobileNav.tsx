@@ -10,6 +10,7 @@ import {
   PiggyBank,
   TrendingUp,
   CreditCard,
+  Settings,
 } from "lucide-react";
 
 const navItems = [
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/budgeting", icon: PiggyBank, label: "Budget" },
   { href: "/investments", icon: TrendingUp, label: "Invest" },
   { href: "/debts", icon: CreditCard, label: "Utang" },
+  { href: "/settings", icon: Settings, label: "Setting" },
 ];
 
 export function MobileNav() {
@@ -31,8 +33,8 @@ export function MobileNav() {
   }, [router]);
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-lg border-t border-border safe-area-pb">
-      <div className="flex items-center justify-around px-2 py-2">
+    <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border glass safe-area-pb">
+      <div className="flex items-center justify-around px-1 py-1.5">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -42,21 +44,21 @@ export function MobileNav() {
               href={item.href}
               prefetch
               className={cn(
-                "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl transition-all duration-200 min-w-[56px]",
+                "flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-all duration-200 min-w-0 flex-1",
                 isActive
                   ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground active:text-foreground"
               )}
             >
               <div
                 className={cn(
-                  "p-1.5 rounded-xl transition-all duration-200",
+                  "p-1 rounded-lg transition-all duration-200",
                   isActive && "bg-primary/10"
                 )}
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
               </div>
-              <span className="text-[10px] font-medium">{item.label}</span>
+              <span className="text-[9px] font-medium leading-none truncate max-w-full">{item.label}</span>
             </Link>
           );
         })}

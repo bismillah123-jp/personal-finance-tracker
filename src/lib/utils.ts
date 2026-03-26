@@ -7,14 +7,24 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatCurrency(
   amount: number,
-  currency: string = "IDR"
+  currency: string = "IDR",
+  locale: string = "id-ID"
 ): string {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  } catch {
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  }
 }
 
 export function formatDate(
@@ -28,8 +38,8 @@ export function formatDate(
   }).format(new Date(date));
 }
 
-export function formatShortDate(date: string | Date): string {
-  return new Intl.DateTimeFormat("id-ID", {
+export function formatShortDate(date: string | Date, locale: string = "id-ID"): string {
+  return new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "short",
   }).format(new Date(date));
@@ -40,9 +50,9 @@ export function getCurrentMonth(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function getMonthName(monthStr: string): string {
+export function getMonthName(monthStr: string, locale: string = "id-ID"): string {
   const [year, month] = monthStr.split("-");
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat(locale, {
     month: "long",
     year: "numeric",
   }).format(new Date(parseInt(year), parseInt(month) - 1));
@@ -70,4 +80,17 @@ export function groupByDate<T extends { date: string }>(
     groups[dateKey].push(item);
     return groups;
   }, {} as Record<string, T[]>);
+}
+
+/** Format a raw number string with thousand separators (dots for id-ID) */
+export function formatNumberInput(value: string): string {
+  const cleaned = value.replace(/[^\d]/g, "");
+  if (!cleaned) return "";
+  return new Intl.NumberFormat("id-ID").format(Number(cleaned));
+}
+
+/** Parse a formatted number string back to a number */
+export function parseFormattedNumber(value: string): number {
+  const cleaned = value.replace(/[^\d]/g, "");
+  return Number(cleaned) || 0;
 }

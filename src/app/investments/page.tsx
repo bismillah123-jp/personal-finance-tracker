@@ -18,6 +18,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -42,6 +43,7 @@ import {
   getInvestments,
   updateInvestment,
   type Investment as DbInvestment,
+  isSupabaseConfigured,
 } from "@/lib/supabase";
 import { exportInvestmentReport } from "@/lib/export";
 import { toNumber } from "@/lib/data-utils";
@@ -91,10 +93,10 @@ const EMPTY_FORM: InvestmentFormState = {
 };
 
 export default function InvestmentsPage() {
-  const { user } = useAuth();
+  const { user, currency, locale } = useAuth();
   const cachedInvestments = user ? getCachedInvestmentsSnapshot(user.id) : [];
   const [investments, setInvestments] = useState<DbInvestment[]>(cachedInvestments);
-  const [loading, setLoading] = useState(!cachedInvestments.length);
+  const [loading, setLoading] = useState(!cachedInvestments.length && isSupabaseConfigured);
   const [error, setError] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<DbInvestment | null>(null);
@@ -324,7 +326,7 @@ export default function InvestmentsPage() {
             <div>
               <p className="text-sm font-semibold text-yellow-900 dark:text-yellow-100">Harga emas live</p>
               <p className="mt-1 text-2xl font-bold text-yellow-700 dark:text-yellow-300">
-                {goldPrice ? `${formatCurrency(goldPrice.gold)} / gram` : "Belum tersedia"}
+                {goldPrice ? `${formatCurrency(goldPrice.gold, currency, locale)} / gram` : "Belum tersedia"}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {goldPrice
@@ -343,13 +345,13 @@ export default function InvestmentsPage() {
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Total Nilai Awal</p>
-              <p className="mt-1 break-words text-xl font-bold">{formatCurrency(totalInitial)}</p>
+              <p className="mt-1 break-words text-xl font-bold">{formatCurrency(totalInitial, currency, locale)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground">Nilai Saat Ini</p>
-              <p className="mt-1 break-words text-xl font-bold">{formatCurrency(totalCurrent)}</p>
+              <p className="mt-1 break-words text-xl font-bold">{formatCurrency(totalCurrent, currency, locale)}</p>
             </CardContent>
           </Card>
           <Card>
@@ -357,7 +359,7 @@ export default function InvestmentsPage() {
               <p className="text-xs text-muted-foreground">Gain / Loss</p>
               <p className={`mt-1 break-words text-xl font-bold ${totalGain >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                 {totalGain >= 0 ? "+" : ""}
-                {formatCurrency(totalGain)}
+                {formatCurrency(totalGain, currency, locale)}
               </p>
             </CardContent>
           </Card>
@@ -431,17 +433,17 @@ export default function InvestmentsPage() {
                       <div className="mt-4 space-y-2 text-sm">
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Nilai awal</span>
-                          <span className="font-medium">{formatCurrency(initialValue)}</span>
+                          <span className="font-medium">{formatCurrency(initialValue, currency, locale)}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Nilai sekarang</span>
-                          <span className="font-medium">{formatCurrency(currentValue)}</span>
+                          <span className="font-medium">{formatCurrency(currentValue, currency, locale)}</span>
                         </div>
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Growth</span>
                           <span className={`font-bold ${isGain ? "text-emerald-600" : "text-rose-600"}`}>
                             {isGain ? <ArrowUpRight className="mr-1 inline h-4 w-4" /> : <ArrowDownRight className="mr-1 inline h-4 w-4" />}
-                            {formatCurrency(gain)} ({gainPercentage.toFixed(1)}%)
+                            {formatCurrency(gain, currency, locale)} ({gainPercentage.toFixed(1)}%)
                           </span>
                         </div>
                         {typeof investment.gold_grams === "number" && investment.gold_grams > 0 && (
@@ -453,7 +455,7 @@ export default function InvestmentsPage() {
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-muted-foreground">Harga per gram</span>
                               <span className="font-medium">
-                                {investment.live_price_per_gram ? formatCurrency(investment.live_price_per_gram) : "Belum tersedia"}
+                                {investment.live_price_per_gram ? formatCurrency(investment.live_price_per_gram, currency, locale) : "Belum tersedia"}
                               </span>
                             </div>
                           </>
@@ -462,7 +464,7 @@ export default function InvestmentsPage() {
                           <>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-muted-foreground">Invest rutin / bulan</span>
-                              <span className="font-medium">{formatCurrency(investment.monthly_budget)}</span>
+                              <span className="font-medium">{formatCurrency(investment.monthly_budget, currency, locale)}</span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-muted-foreground">Estimasi gram / bulan</span>
@@ -472,7 +474,7 @@ export default function InvestmentsPage() {
                         )}
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">Tanggal beli</span>
-                          <span className="font-medium">{formatDate(investment.purchase_date)}</span>
+                          <span className="font-medium">{formatDate(investment.purchase_date, locale)}</span>
                         </div>
                       </div>
 
@@ -558,7 +560,7 @@ export default function InvestmentsPage() {
                               : !toNumber(form.grams)
                                 ? "Masukkan berat emas dulu"
                                 : liveGoldPreviewValue
-                                  ? formatCurrency(liveGoldPreviewValue)
+                                  ? formatCurrency(liveGoldPreviewValue, currency, locale)
                                   : "—"
                         }
                         readOnly
@@ -581,7 +583,7 @@ export default function InvestmentsPage() {
                     <div className="flex items-center justify-between">
                       <p className="font-medium">Preview emas live</p>
                       {goldPrice && (
-                        <p className="text-xs opacity-70">{formatCurrency(goldPrice.gold)}/gram</p>
+                        <p className="text-xs opacity-70">{formatCurrency(goldPrice.gold, currency, locale)}/gram</p>
                       )}
                     </div>
                     {goldPriceError ? (
@@ -603,7 +605,7 @@ export default function InvestmentsPage() {
                       <>
                         <p className="mt-1">Nilai sekarang otomatis ikut harga emas API.</p>
                         {estimatedMonthlyGoldGrams > 0 && (
-                          <p className="mt-1">Dengan budget {formatCurrency(toNumber(form.monthlyBudget))}/bulan, estimasinya dapat {estimatedMonthlyGoldGrams.toFixed(4)} gram per bulan.</p>
+                          <p className="mt-1">Dengan budget {formatCurrency(toNumber(form.monthlyBudget), currency, locale)}/bulan, estimasinya dapat {estimatedMonthlyGoldGrams.toFixed(4)} gram per bulan.</p>
                         )}
                       </>
                     )}
