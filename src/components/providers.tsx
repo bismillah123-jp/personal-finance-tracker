@@ -65,23 +65,28 @@ export function useTheme() {
 }
 
 // ============================================================
-// VISIBILITY HOOK — reconnect on tab focus
+// VISIBILITY HOOK — reconnect on tab focus / online
 // ============================================================
 
 export function usePageVisibility(onVisible: () => void) {
+  const onVisibleRef = React.useRef(onVisible);
+  onVisibleRef.current = onVisible;
+
   React.useEffect(() => {
     const handler = () => {
       if (document.visibilityState === "visible") {
-        onVisible();
+        onVisibleRef.current();
       }
     };
-    document.addEventListener("visibilitychange", handler);
+    window.addEventListener("visibilitychange", handler);
     window.addEventListener("focus", handler);
+    window.addEventListener("online", handler);
     return () => {
-      document.removeEventListener("visibilitychange", handler);
+      window.removeEventListener("visibilitychange", handler);
       window.removeEventListener("focus", handler);
+      window.removeEventListener("online", handler);
     };
-  }, [onVisible]);
+  }, []);
 }
 
 // ============================================================
@@ -132,23 +137,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const currency = profile?.currency || "IDR";
   const locale = profile?.locale || "id-ID";
 
-  // Reconnect logic: clear stale cache + refresh session
+  const fetchProfile = useCallback(async (userId: string) => {
+    if (!isSupabaseConfigured) {
+      setProfile(DEMO_PROFILE);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      
+      if (error && error.code === "PGRST116") {
+        const { data: newProfile } = await supabase
+          .from("profiles")
+          .insert({ id: userId, email: user?.email ?? "" })
+          .select()
+          .single();
+        setProfile(newProfile);
+      } else if (!error) {
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.email]);
+
+  // Reconnect logic: clear stale cache + refresh session + re-fetch profile
   const reconnect = useCallback(() => {
     if (!isSupabaseConfigured) return;
-    // Clear stale query cache so next fetch is fresh
+
+    // 1. Clear all stale query cache
     clearLocalQueryCache();
-    // Refresh the supabase auth session (re-validates JWT)
-    supabase.auth.getSession().then(({ data: { session: freshSession } }) => {
+
+    // 2. Refresh the auth session — re-validates JWT, uses refresh token if expired
+    supabase.auth.getSession().then(async ({ data: { session: freshSession } }) => {
       if (freshSession) {
         setSession(freshSession);
         setUser(freshSession.user);
+        // 3. Re-fetch profile to keep everything in sync
+        await fetchProfile(freshSession.user.id);
+      } else {
+        // Session is truly gone (expired without refresh) — redirect to login
+        setUser(null);
+        setSession(null);
+        setProfile(null);
+        const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+        if (!currentPath.startsWith("/auth")) {
+          router.push("/auth/login");
+        }
       }
-    }).catch(() => {
-      // Silently fail — user will see errors on next action
+    }).catch(async () => {
+      // Network error on reconnect — let Supabase handle via built-in retry
+      // But still try one more time after a short delay
+      await new Promise(r => setTimeout(r, 1000));
+      try {
+        const { data: { session: retrySession } } = await supabase.auth.getSession();
+        if (retrySession) {
+          setSession(retrySession);
+          setUser(retrySession.user);
+          await fetchProfile(retrySession.user.id);
+        }
+      } catch {
+        // Double failure — silently handle, user can manually refresh
+      }
     });
-  }, []);
+  }, [router, fetchProfile]);
 
-  // Auto-reconnect when tab becomes visible again
+  // Auto-reconnect when tab becomes visible / network comes back
   usePageVisibility(reconnect);
 
   useEffect(() => {
@@ -212,37 +273,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to prefetch app data", error);
     });
   }, [router, user]);
-
-  const fetchProfile = async (userId: string) => {
-    if (!isSupabaseConfigured) {
-      setProfile(DEMO_PROFILE);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-      
-      if (error && error.code === "PGRST116") {
-        const { data: newProfile } = await supabase
-          .from("profiles")
-          .insert({ id: userId, email: user?.email ?? "" })
-          .select()
-          .single();
-        setProfile(newProfile);
-      } else if (!error) {
-        setProfile(data);
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured) return { error: createSupabaseDisabledError() };

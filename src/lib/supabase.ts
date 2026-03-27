@@ -16,7 +16,19 @@ function createSupabaseClient(): SupabaseClient {
   }
   
   if (!supabaseInstance) {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        // Auto-refresh token even when tab is in background
+        autoRefreshToken: true,
+        // Persist session in localStorage (survives tab close / browser restart)
+        persistSession: true,
+        // Detect session from URL hash (for magic links / OAuth callbacks)
+        detectSessionInUrl: true,
+        // Refresh the token every time the tab comes back into focus
+        // Supabase v2 handles this via storage event listeners
+        storageKey: "fintrack-auth",
+      },
+    });
   }
   return supabaseInstance;
 }
