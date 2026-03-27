@@ -278,3 +278,35 @@ CREATE TRIGGER update_debts_updated_at BEFORE UPDATE ON debts
 -- ============================================================
 -- SEED DATA (Optional - for default wallets)
 -- ============================================================
+
+-- ============================================================
+-- WHATSAPP USERS TABLE (WhatsApp → Supabase user mapping)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS wa_users (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  wa_number TEXT NOT NULL UNIQUE,           -- WhatsApp number (e.g., 628123456789)
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  device_id TEXT,                           -- GOWA device ID (for multi-device)
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index for fast phone lookup
+CREATE INDEX IF NOT EXISTS idx_wa_users_wa_number ON wa_users(wa_number);
+CREATE INDEX IF NOT EXISTS idx_wa_users_user_id ON wa_users(user_id);
+
+-- RLS
+ALTER TABLE wa_users ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own wa mapping" ON wa_users
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own wa mapping" ON wa_users
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own wa mapping" ON wa_users
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE TRIGGER update_wa_users_updated_at BEFORE UPDATE ON wa_users
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
