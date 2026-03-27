@@ -309,10 +309,14 @@ function getProgressBar(percentage: number): string {
 
 // Get today's date in YYYY-MM-DD format (WIB)
 export function getTodayWIB(): string {
-  const now = new Date();
-  // WIB = UTC+7
-  const wib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  return wib.toISOString().split("T")[0];
+  return new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" });
+}
+
+// Get yesterday's date in YYYY-MM-DD format (WIB)
+export function getYesterdayWIB(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toLocaleDateString("sv-SE", { timeZone: "Asia/Jakarta" });
 }
 
 // Get month string like "2026-03"
