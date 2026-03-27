@@ -35,6 +35,27 @@ function createSupabaseClient(): SupabaseClient {
 
 export const supabase = createSupabaseClient();
 
+// ── Admin client (service role) — bypasses RLS for server-side operations ──
+let supabaseAdminInstance: SupabaseClient | null = null;
+
+export function getSupabaseAdmin(): SupabaseClient | null {
+  if (supabaseAdminInstance) return supabaseAdminInstance;
+
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.warn("SUPABASE_SERVICE_ROLE_KEY not set — admin operations may fail due to RLS");
+    return null;
+  }
+
+  supabaseAdminInstance = createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+  return supabaseAdminInstance;
+}
+
 type CacheEntry = {
   expiresAt: number;
   value: unknown;

@@ -1,7 +1,7 @@
 // src/lib/wa-handler.ts
 // Main message handler — routes WhatsApp messages to the right flow
 
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { supabase, isSupabaseConfigured, getSupabaseAdmin } from "./supabase";
 import {
   analyzeMessage,
   buildTransactionReply,
@@ -28,10 +28,13 @@ interface WAUserMapping {
 async function getUserByPhone(phone: string): Promise<WAUserMapping | null> {
   if (!isSupabaseConfigured) return null;
 
+  // Use admin client to bypass RLS
+  const db = getSupabaseAdmin() || supabase;
+
   // Normalize phone number (remove +, ensure starts with country code)
   const normalizedPhone = phone.replace(/[^0-9]/g, "");
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("wa_users")
     .select("wa_number, user_id, device_id")
     .eq("wa_number", normalizedPhone)
