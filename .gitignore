@@ -35,3 +35,4 @@ coverage/
 *.log
 .run/
 .vercel
+tsconfig.tsbuildinfo

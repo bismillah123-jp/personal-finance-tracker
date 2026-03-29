@@ -1,6 +1,7 @@
 {
   "name": "personal-finance-tracker",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "vite",
