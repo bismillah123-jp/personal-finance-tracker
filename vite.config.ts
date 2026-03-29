@@ -1,24 +1,28 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
 
-// Cloudflare plugin is optional — only loaded when available
-let cloudflarePlugin: any = null;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Try to load Cloudflare plugin (optional, only available on CF Pages)
+let cloudflarePlugins: any[] = [];
 try {
   const cf = await import('@cloudflare/vite-plugin');
-  cloudflarePlugin = cf.cloudflare();
+  cloudflarePlugins = [cf.cloudflare()];
 } catch {
-  // Not on Cloudflare — skip plugin
+  // Not on Cloudflare or plugin not installed — skip
 }
 
 export default defineConfig({
   plugins: [
     react(),
-    ...(cloudflarePlugin ? [cloudflarePlugin] : []),
-  ].filter(Boolean),
+    ...cloudflarePlugins,
+  ],
   resolve: {
     alias: {
-      '@': path.resolve(import.meta.dirname, './src'),
+      '@': resolve(__dirname, './src'),
     },
   },
   server: {
