@@ -1,8 +1,5 @@
-"use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Bell,
   CreditCard,
@@ -10,14 +7,16 @@ import {
   LogOut,
   Settings,
   TrendingUp,
-
   Wallet,
+  Info,
+  AlertTriangle,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -27,24 +26,42 @@ import { getBudgets, getDebts, getTransactions, getWallets, isSupabaseConfigured
 import { getCurrentMonth } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 
-const toneClasses: Record<AppNotification["tone"], string> = {
-  info: "border-blue-500/30 bg-blue-500/10 text-blue-900 dark:text-blue-100",
-  warning: "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-100",
-  danger: "border-rose-500/30 bg-rose-500/10 text-rose-900 dark:text-rose-100",
-  success: "border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:text-emerald-100",
+type ToneConfig = {
+  bg: string;
+  border: string;
+  text: string;
+  Icon: React.FC<{ className?: string }>;
 };
 
-const toneIcons: Record<AppNotification["tone"], string> = {
-  info: "💡",
-  warning: "⚠️",
-  danger: "🚨",
-  success: "✅",
+const toneConfig: Record<AppNotification["tone"], ToneConfig> = {
+  info: {
+    bg: "bg-blue-50 dark:bg-blue-950/50",
+    border: "border-blue-200 dark:border-blue-800",
+    text: "text-blue-800 dark:text-blue-200",
+    Icon: Info,
+  },
+  warning: {
+    bg: "bg-amber-50 dark:bg-amber-950/50",
+    border: "border-amber-200 dark:border-amber-800",
+    text: "text-amber-800 dark:text-amber-200",
+    Icon: AlertTriangle,
+  },
+  danger: {
+    bg: "bg-rose-50 dark:bg-rose-950/50",
+    border: "border-rose-200 dark:border-rose-800",
+    text: "text-rose-800 dark:text-rose-200",
+    Icon: AlertCircle,
+  },
+  success: {
+    bg: "bg-emerald-50 dark:bg-emerald-950/50",
+    border: "border-emerald-200 dark:border-emerald-800",
+    text: "text-emerald-800 dark:text-emerald-200",
+    Icon: CheckCircle,
+  },
 };
 
 export function Header() {
-  const { profile, user, signOut, reconnect } = useAuth();
-  const { theme } = useTheme();
-  const router = useRouter();
+  const { profile, user, signOut } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -84,17 +101,10 @@ export function Header() {
           transactionsThisMonth: transactions,
           budgetProgress,
           debts,
-        }),
+        })
       );
     } catch (error) {
       console.error("Failed to load notifications", error);
-      setNotifications([{
-        id: "notif-error",
-        title: "Notifikasi gagal dimuat",
-        description: "Silakan refresh halaman.",
-        href: "/dashboard",
-        tone: "warning",
-      }]);
     } finally {
       setLoadingNotifications(false);
     }
@@ -104,14 +114,15 @@ export function Header() {
     loadNotifications();
   }, [loadNotifications]);
 
-  // Re-load notifications when tab regains focus
-  usePageVisibility(useCallback(() => {
-    loadNotifications();
-  }, [loadNotifications]));
+  usePageVisibility(
+    useCallback(() => {
+      loadNotifications();
+    }, [loadNotifications])
+  );
 
   const unreadCount = useMemo(
     () => notifications.filter((n) => n.tone !== "success").length,
-    [notifications],
+    [notifications]
   );
 
   const getInitials = (name: string) =>
@@ -119,15 +130,14 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="flex items-center justify-between gap-3 px-3 py-2.5 sm:px-4 sm:py-3 lg:px-6">
+          {/* Mobile logo */}
           <div className="flex min-w-0 items-center gap-2 lg:hidden">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
               <span className="text-xs font-extrabold text-white">FT</span>
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold">FinTrack</p>
-            </div>
+            <p className="truncate text-sm font-bold">FinTrack</p>
           </div>
 
           <div className="hidden lg:block" />
@@ -135,6 +145,7 @@ export function Header() {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <ThemeToggle />
 
+            {/* Notification Bell */}
             <Button
               variant="ghost"
               size="icon"
@@ -150,6 +161,7 @@ export function Header() {
               )}
             </Button>
 
+            {/* Account Button */}
             <button
               type="button"
               onClick={() => setShowAccountMenu(true)}
@@ -175,48 +187,61 @@ export function Header() {
         <DialogContent className="max-w-md sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
+              <Bell className="h-4 w-4" />
               Notifikasi
+              {unreadCount > 0 && (
+                <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-bold text-white">
+                  {Math.min(unreadCount, 99)}
+                </span>
+              )}
             </DialogTitle>
-            <DialogDescription>
-              {unreadCount > 0 ? `${unreadCount} pemberitahuan penting` : "Tidak ada pemberitahuan"}
-            </DialogDescription>
           </DialogHeader>
 
           {loadingNotifications ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
+            <div className="flex items-center justify-center py-10 text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Memuat...
+              <span className="text-sm">Memuat notifikasi...</span>
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="py-10 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-900/30">
+                <CheckCircle className="h-6 w-6 text-emerald-500" />
+              </div>
+              <p className="font-semibold text-sm">Semua beres!</p>
+              <p className="text-xs text-muted-foreground mt-1">Tidak ada pemberitahuan saat ini.</p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {notifications.map((n) => (
-                <Link
-                  key={n.id}
-                  href={n.href}
-                  onClick={() => setShowNotifications(false)}
-                  className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 transition hover:opacity-80 ${toneClasses[n.tone]}`}
-                >
-                  <span className="text-base mt-0.5 shrink-0">{toneIcons[n.tone]}</span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold leading-snug">{n.title}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed opacity-80">{n.description}</p>
-                  </div>
-                </Link>
-              ))}
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+              {notifications.map((n) => {
+                const config = toneConfig[n.tone];
+                const { Icon } = config;
+                return (
+                  <Link
+                    key={n.id}
+                    to={n.href}
+                    onClick={() => setShowNotifications(false)}
+                    className={`flex items-start gap-3 rounded-xl border p-3 transition-all hover:opacity-90 hover:shadow-sm ${config.bg} ${config.border}`}
+                  >
+                    <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${config.text}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-semibold leading-snug ${config.text}`}>{n.title}</p>
+                      <p className={`mt-0.5 text-xs leading-relaxed opacity-80 ${config.text}`}>{n.description}</p>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Account Menu Dialog — cleaned up layout */}
+      {/* Account Menu Dialog */}
       <Dialog open={showAccountMenu} onOpenChange={setShowAccountMenu}>
         <DialogContent className="max-w-sm sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Akun Saya</DialogTitle>
           </DialogHeader>
 
-          {/* Profile card */}
           <div className="flex items-center gap-3 rounded-xl bg-gradient-to-r from-violet-500/10 to-fuchsia-500/10 p-3 border border-border">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-sm font-bold text-white">
               {profile?.full_name ? getInitials(profile.full_name) : profile?.email?.[0]?.toUpperCase() || "U"}
@@ -227,17 +252,16 @@ export function Header() {
             </div>
           </div>
 
-          {/* Quick links */}
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {[
-              { href: "/settings", icon: Settings, label: "Pengaturan" },
-              { href: "/settings#wallets", icon: Wallet, label: "Kelola Dompet" },
-              { href: "/investments", icon: TrendingUp, label: "Investasi" },
-              { href: "/debts", icon: CreditCard, label: "Utang & Piutang" },
+              { to: "/settings", icon: Settings, label: "Pengaturan" },
+              { to: "/settings", icon: Wallet, label: "Kelola Dompet" },
+              { to: "/investments", icon: TrendingUp, label: "Investasi" },
+              { to: "/debts", icon: CreditCard, label: "Utang & Piutang" },
             ].map((item) => (
               <Link
-                key={item.href}
-                href={item.href}
+                key={item.to + item.label}
+                to={item.to}
                 onClick={() => setShowAccountMenu(false)}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition hover:bg-accent"
               >
@@ -247,7 +271,6 @@ export function Header() {
             ))}
           </div>
 
-          {/* Logout */}
           <div className="border-t border-border pt-3">
             <button
               onClick={async () => {

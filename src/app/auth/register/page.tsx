@@ -1,8 +1,5 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Mail, Lock, User, Check, X, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,23 +8,23 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 import { AuthShell } from "@/components/auth/auth-shell";
 
 const REQS = [
-  { test: (p: string) => p.length >= 8,        label: "Minimal 8 karakter" },
-  { test: (p: string) => /[A-Z]/.test(p),      label: "1 huruf kapital" },
-  { test: (p: string) => /[a-z]/.test(p),      label: "1 huruf kecil" },
-  { test: (p: string) => /[0-9]/.test(p),      label: "1 angka" },
+  { test: (p: string) => p.length >= 8, label: "Minimal 8 karakter" },
+  { test: (p: string) => /[A-Z]/.test(p), label: "1 huruf kapital" },
+  { test: (p: string) => /[a-z]/.test(p), label: "1 huruf kecil" },
+  { test: (p: string) => /[0-9]/.test(p), label: "1 angka" },
 ];
 
 export default function RegisterPage() {
-  const [fullName, setFullName]           = useState("");
-  const [email, setEmail]                 = useState("");
-  const [password, setPassword]           = useState("");
-  const [confirmPassword, setConfirm]     = useState("");
-  const [showPassword, setShowPassword]   = useState(false);
-  const [error, setError]                 = useState("");
-  const [loading, setLoading]             = useState(false);
-  const [mounted, setMounted]             = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { signUp } = useAuth();
-  const router     = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -35,16 +32,14 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
     if (!isSupabaseConfigured) { setError("Supabase belum dikonfigurasi."); return; }
-    if (password !== confirmPassword)          { setError("Password tidak cocok."); return; }
-    if (!REQS.every(r => r.test(password)))    { setError("Password tidak memenuhi syarat."); return; }
+    if (password !== confirmPassword) { setError("Password tidak cocok."); return; }
+    if (!REQS.every(r => r.test(password))) { setError("Password tidak memenuhi syarat."); return; }
 
     setLoading(true);
     const { error } = await signUp(email, password, fullName);
     if (error) { setError(error.message); setLoading(false); }
-    else        { router.push("/auth/login?registered=true"); }
+    else { navigate("/auth/login?registered=true"); }
   };
-
-  const allMet = REQS.every(r => r.test(password));
 
   return (
     <AuthShell title="Buat akun baru" subtitle="Gratis selamanya, mulai sekarang">
@@ -60,7 +55,6 @@ export default function RegisterPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Full Name */}
         <div className="space-y-1.5">
           <Label htmlFor="fullName" className="text-sm font-medium">Nama Lengkap</Label>
           <div className="relative">
@@ -71,7 +65,6 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        {/* Email */}
         <div className="space-y-1.5">
           <Label htmlFor="email" className="text-sm font-medium">Email</Label>
           <div className="relative">
@@ -82,7 +75,6 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        {/* Password */}
         <div className="space-y-1.5">
           <Label htmlFor="password" className="text-sm font-medium">Password</Label>
           <div className="relative">
@@ -96,7 +88,6 @@ export default function RegisterPage() {
             </button>
           </div>
 
-          {/* Password strength hints */}
           {password && (
             <div className="grid grid-cols-2 gap-1 pt-1">
               {REQS.map((r, i) => {
@@ -116,7 +107,6 @@ export default function RegisterPage() {
           )}
         </div>
 
-        {/* Confirm Password */}
         <div className="space-y-1.5">
           <Label htmlFor="confirmPassword" className="text-sm font-medium">Konfirmasi Password</Label>
           <div className="relative">
@@ -125,9 +115,9 @@ export default function RegisterPage() {
               value={confirmPassword} onChange={(e) => setConfirm(e.target.value)} required
               className={`pl-10 h-11 rounded-xl transition-colors ${
                 confirmPassword && password !== confirmPassword
-                  ? "border-red-400 focus:border-red-400 focus:ring-red-400/20"
+                  ? "border-red-400 focus:border-red-400"
                   : confirmPassword && password === confirmPassword
-                  ? "border-emerald-400 focus:border-emerald-400 focus:ring-emerald-400/20"
+                  ? "border-emerald-400 focus:border-emerald-400"
                   : ""
               }`} />
             {confirmPassword && (
@@ -140,12 +130,11 @@ export default function RegisterPage() {
           </div>
         </div>
 
-        {/* Submit */}
         <button type="submit"
           disabled={loading || (mounted && !isSupabaseConfigured)}
           className="w-full h-11 rounded-xl font-semibold text-sm text-white flex items-center justify-center gap-2
-                     bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700
-                     shadow-md shadow-blue-500/20 hover:shadow-blue-500/30
+                     bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700
+                     shadow-md shadow-emerald-500/20 hover:shadow-emerald-500/30
                      disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all duration-200
                      relative overflow-hidden group">
           <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent
@@ -165,7 +154,7 @@ export default function RegisterPage() {
 
       <p className="text-center text-sm text-muted-foreground">
         Sudah punya akun?{" "}
-        <Link href="/auth/login" className="text-primary font-semibold hover:text-primary/80 transition-colors">
+        <Link to="/auth/login" className="text-primary font-semibold hover:text-primary/80 transition-colors">
           Masuk
         </Link>
       </p>

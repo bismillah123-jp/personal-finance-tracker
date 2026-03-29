@@ -1,5 +1,3 @@
-"use client";
-
 import { AuthGuard } from "@/components/providers";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { Header } from "./Header";
@@ -26,10 +24,12 @@ export function AppShell({ children }: AppShellProps) {
         <main className="min-w-0 px-3 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
           {!isSupabaseConfigured && (
             <div className="mb-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-800 dark:text-amber-200">
-              Mode demo aktif — lengkapi <code className="font-mono text-xs">NEXT_PUBLIC_SUPABASE_URL</code> dan <code className="font-mono text-xs">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> di <code className="font-mono text-xs">.env.local</code> untuk koneksi Supabase.
+              Mode demo aktif — lengkapi{" "}
+              <code className="font-mono text-xs">VITE_SUPABASE_URL</code> dan{" "}
+              <code className="font-mono text-xs">VITE_SUPABASE_ANON_KEY</code> di{" "}
+              <code className="font-mono text-xs">.env.local</code> untuk koneksi Supabase.
             </div>
           )}
-
           <AuthGuard>{children}</AuthGuard>
         </main>
       </div>

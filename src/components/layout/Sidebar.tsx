@@ -1,8 +1,4 @@
-"use client";
-
-import { useEffect } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -13,6 +9,7 @@ import {
   Settings,
   LogOut,
   Wallet,
+  Bot,
 } from "lucide-react";
 import { useAuth } from "@/components/providers";
 
@@ -22,57 +19,38 @@ const navItems = [
   { label: "Budgeting", href: "/budgeting", icon: PiggyBank },
   { label: "Investasi", href: "/investments", icon: TrendingUp },
   { label: "Utang", href: "/debts", icon: CreditCard },
+  { label: "AI Asisten", href: "/ai", icon: Bot },
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
-  const router = useRouter();
+  const location = useLocation();
   const { signOut, profile } = useAuth();
 
-  useEffect(() => {
-    navItems.forEach((item) => {
-      router.prefetch(item.href);
-    });
-
-    router.prefetch("/settings");
-  }, [router]);
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map(n => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  const getInitials = (name: string) =>
+    name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
   return (
     <aside className="flex flex-col h-screen sticky top-0 border-r border-border bg-card w-64">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-border">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-200 dark:shadow-indigo-900/30 shrink-0">
+        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/30 shrink-0">
           <Wallet className="w-4 h-4 text-white" />
         </div>
         <div className="flex flex-col">
-          <span className="text-sm font-bold text-foreground tracking-tight">
-            Fintrack
-          </span>
-          <span className="text-[10px] text-muted-foreground">
-            Personal Finance
-          </span>
+          <span className="text-sm font-bold text-foreground tracking-tight">FinTrack</span>
+          <span className="text-[10px] text-muted-foreground">Personal Finance</span>
         </div>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+          const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + "/");
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
-              href={item.href}
-              prefetch
+              to={item.href}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group",
                 isActive
@@ -87,9 +65,7 @@ export function Sidebar() {
                 )}
               />
               <span>{item.label}</span>
-              {isActive && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
-              )}
+              {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
             </Link>
           );
         })}
@@ -98,11 +74,10 @@ export function Sidebar() {
       {/* Bottom Nav */}
       <div className="px-3 pb-4 space-y-1 border-t border-border pt-2">
         <Link
-          href="/settings"
-          prefetch
+          to="/settings"
           className={cn(
             "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200",
-            pathname === "/settings"
+            location.pathname === "/settings"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:bg-accent hover:text-foreground"
           )}
@@ -126,12 +101,8 @@ export function Sidebar() {
             {profile?.full_name ? getInitials(profile.full_name) : profile?.email?.[0]?.toUpperCase() || "U"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">
-              {profile?.full_name || "User"}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {profile?.email}
-            </p>
+            <p className="text-sm font-medium truncate">{profile?.full_name || "User"}</p>
+            <p className="text-xs text-muted-foreground truncate">{profile?.email}</p>
           </div>
         </div>
       </div>

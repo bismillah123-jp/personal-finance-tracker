@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/layout/AppShell";
 import { AddTransactionFAB } from "@/components/add-transaction-fab";
@@ -38,7 +36,7 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 const getCategoryInfo = (categoryId: string, type: "income" | "expense") => {
   const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
@@ -181,12 +179,10 @@ export default function TransactionsPage() {
                   Tambahkan dompet terlebih dahulu agar seluruh fitur pencatatan transaksi dapat digunakan.
                 </p>
               </div>
-              <Button asChild className="rounded-xl">
-                <Link href="/settings#wallets">
-                  <Wallet className="mr-2 h-4 w-4" />
-                  Kelola dompet
-                </Link>
-              </Button>
+              <Link to="/settings" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+                <Wallet className="mr-2 h-4 w-4" />
+                Kelola dompet
+              </Link>
             </CardContent>
           </Card>
         )}

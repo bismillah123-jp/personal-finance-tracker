@@ -1,7 +1,5 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,9 +7,9 @@ import { isSupabaseConfigured, requestPasswordReset } from "@/lib/supabase";
 import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail]     = useState("");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState("");
+  const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -41,7 +39,6 @@ export default function ForgotPasswordPage() {
       subtitle={success ? `Link reset dikirim ke ${email}` : "Masukkan email untuk reset password"}
     >
       {success ? (
-        /* ── Success state ── */
         <div className="space-y-5 text-center">
           <div className="flex justify-center">
             <div className="h-16 w-16 rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 flex items-center justify-center">
@@ -49,7 +46,8 @@ export default function ForgotPasswordPage() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Cek inbox atau folder spam kamu. Link reset password aktif selama <strong className="text-foreground">1 jam</strong>.
+            Cek inbox atau folder spam kamu. Link reset password aktif selama{" "}
+            <strong className="text-foreground">1 jam</strong>.
           </p>
           <button
             onClick={() => { setSuccess(false); setEmail(""); }}
@@ -57,14 +55,13 @@ export default function ForgotPasswordPage() {
                        hover:bg-muted transition-colors text-muted-foreground">
             Kirim ulang ke email lain
           </button>
-          <Link href="/auth/login"
+          <Link to="/auth/login"
             className="flex items-center justify-center gap-2 text-sm text-primary font-semibold hover:text-primary/80 transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" />
             Kembali ke login
           </Link>
         </div>
       ) : (
-        /* ── Form state ── */
         <>
           {mounted && !isSupabaseConfigured && (
             <div className="px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
@@ -91,8 +88,8 @@ export default function ForgotPasswordPage() {
             <button type="submit"
               disabled={loading || (mounted && !isSupabaseConfigured)}
               className="w-full h-11 rounded-xl font-semibold text-sm text-white flex items-center justify-center gap-2
-                         bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700
-                         shadow-md shadow-blue-500/20 hover:shadow-blue-500/30
+                         bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700
+                         shadow-md shadow-emerald-500/20 hover:shadow-emerald-500/30
                          disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all duration-200
                          relative overflow-hidden group">
               <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent
@@ -104,7 +101,7 @@ export default function ForgotPasswordPage() {
             </button>
           </form>
 
-          <Link href="/auth/login"
+          <Link to="/auth/login"
             className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" />
             Kembali ke login

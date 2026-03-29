@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, Edit2, PiggyBank, Plus, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";

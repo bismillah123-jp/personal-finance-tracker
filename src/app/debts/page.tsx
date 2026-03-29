@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
 import { Calendar, CreditCard, Edit2, HandCoins, Plus, Trash2, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";

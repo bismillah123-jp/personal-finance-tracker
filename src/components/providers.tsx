@@ -1,8 +1,7 @@
-"use client";
-
 import * as React from "react";
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { User, Session } from "@supabase/supabase-js";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   supabase,
   Profile,
@@ -11,7 +10,6 @@ import {
   supabaseConfigMessage,
   clearLocalQueryCache,
 } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
 import { getCurrentMonth } from "@/lib/utils";
 
 // ============================================================
@@ -39,9 +37,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     const root = document.documentElement;
-    const resolved = theme === "system"
-      ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
-      : theme;
+    const resolved =
+      theme === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : theme;
     setResolvedTheme(resolved);
     root.classList.toggle("dark", resolved === "dark");
   }, [theme]);
@@ -78,11 +79,11 @@ export function usePageVisibility(onVisible: () => void) {
         onVisibleRef.current();
       }
     };
-    window.addEventListener("visibilitychange", handler);
+    document.addEventListener("visibilitychange", handler);
     window.addEventListener("focus", handler);
     window.addEventListener("online", handler);
     return () => {
-      window.removeEventListener("visibilitychange", handler);
+      document.removeEventListener("visibilitychange", handler);
       window.removeEventListener("focus", handler);
       window.removeEventListener("online", handler);
     };
@@ -104,7 +105,6 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: Error | null }>;
-  /** Call this to reconnect after tab switch / screen off */
   reconnect: () => void;
 }
 
@@ -124,7 +124,7 @@ const DEMO_PROFILE: Profile = {
 
 const createSupabaseDisabledError = () =>
   new Error(
-    "Supabase belum dikonfigurasi. Lengkapi NEXT_PUBLIC_SUPABASE_URL dan NEXT_PUBLIC_SUPABASE_ANON_KEY terlebih dahulu."
+    "Supabase belum dikonfigurasi. Lengkapi VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY."
   );
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -132,12 +132,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const currency = profile?.currency || "IDR";
   const locale = profile?.locale || "id-ID";
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
     if (!isSupabaseConfigured) {
       setProfile(DEMO_PROFILE);
       setLoading(false);
@@ -150,66 +151,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select("*")
         .eq("id", userId)
         .single();
-      
+
       if (error && error.code === "PGRST116") {
         const { data: newProfile } = await supabase
           .from("profiles")
-          .insert({ id: userId, email: user?.email ?? "" })
+          .insert({ id: userId, email: userEmail ?? "" })
           .select()
           .single();
         setProfile(newProfile);
       } else if (!error) {
         setProfile(data);
       }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
     } finally {
       setLoading(false);
     }
-  }, [user?.email]);
+  }, []);
 
-  // Reconnect logic: clear stale cache + refresh session + re-fetch profile
+  // Reconnect: clear stale cache + refresh session + re-fetch profile
   const reconnect = useCallback(() => {
     if (!isSupabaseConfigured) return;
 
-    // 1. Clear all stale query cache
     clearLocalQueryCache();
 
-    // 2. Refresh the auth session — re-validates JWT, uses refresh token if expired
-    supabase.auth.getSession().then(async ({ data: { session: freshSession } }) => {
-      if (freshSession) {
-        setSession(freshSession);
-        setUser(freshSession.user);
-        // 3. Re-fetch profile to keep everything in sync
-        await fetchProfile(freshSession.user.id);
-      } else {
-        // Session is truly gone (expired without refresh) — redirect to login
-        setUser(null);
-        setSession(null);
-        setProfile(null);
-        const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
-        if (!currentPath.startsWith("/auth")) {
-          router.push("/auth/login");
+    supabase.auth
+      .getSession()
+      .then(async ({ data: { session: freshSession } }) => {
+        if (freshSession) {
+          setSession(freshSession);
+          setUser(freshSession.user);
+          await fetchProfile(freshSession.user.id, freshSession.user.email);
+        } else {
+          setUser(null);
+          setSession(null);
+          setProfile(null);
+          const currentPath = location.pathname;
+          if (!currentPath.startsWith("/auth")) {
+            navigate("/auth/login");
+          }
         }
-      }
-    }).catch(async () => {
-      // Network error on reconnect — let Supabase handle via built-in retry
-      // But still try one more time after a short delay
-      await new Promise(r => setTimeout(r, 1000));
-      try {
-        const { data: { session: retrySession } } = await supabase.auth.getSession();
-        if (retrySession) {
-          setSession(retrySession);
-          setUser(retrySession.user);
-          await fetchProfile(retrySession.user.id);
+      })
+      .catch(async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        try {
+          const { data: { session: retrySession } } = await supabase.auth.getSession();
+          if (retrySession) {
+            setSession(retrySession);
+            setUser(retrySession.user);
+            await fetchProfile(retrySession.user.id, retrySession.user.email);
+          }
+        } catch {
+          // Silently handle double failure
         }
-      } catch {
-        // Double failure — silently handle, user can manually refresh
-      }
-    });
-  }, [router, fetchProfile]);
+      });
+  }, [navigate, location.pathname, fetchProfile]);
 
-  // Auto-reconnect when tab becomes visible / network comes back
+  // Auto-reconnect on tab visibility / focus / online
   usePageVisibility(reconnect);
 
   useEffect(() => {
@@ -226,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id, session.user.email);
       } else {
         setLoading(false);
       }
@@ -238,18 +236,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
 
         if (session?.user) {
-          await fetchProfile(session.user.id);
+          await fetchProfile(session.user.id, session.user.email);
         } else {
           setProfile(null);
         }
 
-        const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+        const currentPath = location.pathname;
         const isAuthRoute = currentPath.startsWith("/auth");
 
         if (event === "SIGNED_OUT") {
-          router.push("/auth/login");
+          navigate("/auth/login");
         } else if (!session && !isAuthRoute) {
-          router.push("/auth/login");
+          navigate("/auth/login");
         }
 
         setLoading(false);
@@ -257,22 +255,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!user || !isSupabaseConfigured) return;
-
     const month = getCurrentMonth();
-    const routesToPrefetch = [
-      "/dashboard", "/transactions", "/budgeting",
-      "/investments", "/debts", "/settings",
-    ];
-    routesToPrefetch.forEach((route) => router.prefetch(route));
-
     prefetchUserAppData(user.id, month).catch((error) => {
       console.error("Failed to prefetch app data", error);
     });
-  }, [router, user]);
+  }, [user]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!isSupabaseConfigured) return { error: createSupabaseDisabledError() };
@@ -283,50 +275,63 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signUp = useCallback(async (email: string, password: string, fullName: string) => {
     if (!isSupabaseConfigured) return { error: createSupabaseDisabledError() };
     const { error } = await supabase.auth.signUp({
-      email, password, options: { data: { full_name: fullName } }
+      email,
+      password,
+      options: { data: { full_name: fullName } },
     });
     return { error };
   }, []);
 
   const signOut = useCallback(async () => {
     if (!isSupabaseConfigured) {
-      setUser(null); setSession(null); setProfile(DEMO_PROFILE);
-      router.push("/auth/login");
+      setUser(null);
+      setSession(null);
+      setProfile(DEMO_PROFILE);
+      navigate("/auth/login");
       return;
     }
     await supabase.auth.signOut();
     clearLocalQueryCache();
-    router.push("/auth/login");
-  }, [router]);
+    navigate("/auth/login");
+  }, [navigate]);
 
   const updateProfileHandler = useCallback(async (updates: Partial<Profile>) => {
     if (!isSupabaseConfigured) {
-      setProfile(prev =>
-        prev ? { ...prev, ...updates, updated_at: new Date().toISOString() }
-             : { ...DEMO_PROFILE, ...updates, updated_at: new Date().toISOString() }
+      setProfile((prev) =>
+        prev
+          ? { ...prev, ...updates, updated_at: new Date().toISOString() }
+          : { ...DEMO_PROFILE, ...updates, updated_at: new Date().toISOString() }
       );
       return { error: null };
     }
     if (!user) return { error: new Error("User not found") };
-    
+
     const { error } = await supabase.from("profiles").update(updates).eq("id", user.id);
     if (!error) {
-      setProfile(prev => prev ? { ...prev, ...updates } : null);
+      setProfile((prev) => (prev ? { ...prev, ...updates } : null));
       clearLocalQueryCache();
     }
     return { error };
   }, [user]);
 
-  const contextValue = useMemo(() => ({
-    user, session, profile, loading, currency, locale,
-    signIn, signUp, signOut, updateProfile: updateProfileHandler, reconnect,
-  }), [user, session, profile, loading, currency, locale, signIn, signUp, signOut, updateProfileHandler, reconnect]);
-
-  return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-    </AuthContext.Provider>
+  const contextValue = useMemo(
+    () => ({
+      user,
+      session,
+      profile,
+      loading,
+      currency,
+      locale,
+      signIn,
+      signUp,
+      signOut,
+      updateProfile: updateProfileHandler,
+      reconnect,
+    }),
+    [user, session, profile, loading, currency, locale, signIn, signUp, signOut, updateProfileHandler, reconnect]
   );
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
@@ -341,18 +346,22 @@ export function useAuth() {
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  const router = useRouter();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     if (!loading && !user && isSupabaseConfigured) {
-      router.push("/auth/login");
+      navigate("/auth/login", { state: { from: location.pathname } });
     }
-  }, [user, loading, router]);
+  }, [user, loading, navigate, location.pathname]);
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Memuat FinTrack...</p>
+        </div>
       </div>
     );
   }

@@ -1,9 +1,6 @@
-"use client";
-
 import { useState, useEffect } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Mail, Lock, ArrowRight, Wallet } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Eye, EyeOff, Mail, Lock, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/components/providers";
@@ -11,14 +8,14 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 import { AuthShell } from "@/components/auth/auth-shell";
 
 export default function LoginPage() {
-  const [email, setEmail]               = useState("");
-  const [password, setPassword]         = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]               = useState("");
-  const [loading, setLoading]           = useState(false);
-  const [mounted, setMounted]           = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { signIn } = useAuth();
-  const router     = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -31,15 +28,16 @@ export default function LoginPage() {
     }
     setLoading(true);
     const { error } = await signIn(email, password);
-    if (error) { setError(error.message); setLoading(false); }
-    else        { router.push("/dashboard"); }
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      navigate("/dashboard");
+    }
   };
 
   return (
-    <AuthShell
-      title="Selamat datang kembali"
-      subtitle="Masuk ke akun kamu"
-    >
+    <AuthShell title="Selamat datang kembali" subtitle="Masuk ke akun kamu">
       {mounted && !isSupabaseConfigured && (
         <div className="px-3 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
           Mode demo aktif — env Supabase belum diisi.
@@ -52,7 +50,6 @@ export default function LoginPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email */}
         <div className="space-y-1.5">
           <Label htmlFor="email" className="text-sm font-medium">Email</Label>
           <div className="relative">
@@ -63,11 +60,10 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Password */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-            <Link href="/auth/forgot-password"
+            <Link to="/auth/forgot-password"
               className="text-xs text-primary hover:text-primary/80 transition-colors">
               Lupa password?
             </Link>
@@ -84,12 +80,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Submit */}
         <button type="submit"
           disabled={loading || (mounted && !isSupabaseConfigured)}
           className="w-full h-11 rounded-xl font-semibold text-sm text-white flex items-center justify-center gap-2
-                     bg-gradient-to-r from-blue-500 to-violet-600 hover:from-blue-600 hover:to-violet-700
-                     shadow-md shadow-blue-500/20 hover:shadow-blue-500/30
+                     bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700
+                     shadow-md shadow-emerald-500/20 hover:shadow-emerald-500/30
                      disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-all duration-200
                      relative overflow-hidden group">
           <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent
@@ -109,7 +104,7 @@ export default function LoginPage() {
 
       <p className="text-center text-sm text-muted-foreground">
         Belum punya akun?{" "}
-        <Link href="/auth/register" className="text-primary font-semibold hover:text-primary/80 transition-colors">
+        <Link to="/auth/register" className="text-primary font-semibold hover:text-primary/80 transition-colors">
           Daftar gratis
         </Link>
       </p>

@@ -1,11 +1,9 @@
-"use client";
-
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import dynamic from "next/dynamic";
+import { Link } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Landmark, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { AddTransactionFAB } from "@/components/add-transaction-fab";
 import { BudgetProgress } from "@/components/dashboard/BudgetProgress";
+import { CashFlowChart } from "@/components/dashboard/CashFlowChart";
 import { CategoryBreakdown } from "@/components/dashboard/CategoryBreakdown";
 import { GoldPriceCard } from "@/components/dashboard/GoldPriceCard";
 import { MetricCard } from "@/components/dashboard/MetricCard";
@@ -19,18 +17,6 @@ import { enrichInvestmentsWithGoldPrice } from "@/lib/gold-investments";
 import { getGoldPrice, type GoldPriceData } from "@/lib/gold-price";
 import { getCachedDashboardSnapshot, getDashboardData, type Budget as DbBudget, type Debt as DbDebt, type Investment as DbInvestment, type Transaction as DbTransaction, type Wallet as DbWallet, isSupabaseConfigured } from "@/lib/supabase";
 import { formatCurrency, getCurrentMonth, getMonthName } from "@/lib/utils";
-
-const CashFlowChart = dynamic(
-  () => import("@/components/dashboard/CashFlowChart").then((mod) => mod.CashFlowChart),
-  {
-    ssr: false,
-    loading: () => (
-      <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">Menyiapkan grafik arus kas...</CardContent>
-      </Card>
-    ),
-  },
-);
 
 export default function DashboardPage() {
   const { user, currency, locale } = useAuth();
@@ -135,9 +121,9 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="outline" className="rounded-xl">
-              <Link href="/settings#wallets">Tambah dompet</Link>
-            </Button>
+            <Link to="/settings" className="inline-flex items-center justify-center rounded-xl border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent transition-colors">
+              Tambah dompet
+            </Link>
             <AddTransactionFAB
               canCreateTransaction={wallets.length > 0}
               disabledReason="Tambahkan dompet terlebih dahulu agar transaksi dapat dicatat dari dashboard."
@@ -205,12 +191,12 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Button asChild className="rounded-xl">
-                  <Link href="/settings#wallets">Kelola dompet</Link>
-                </Button>
-                <Button asChild variant="outline" className="rounded-xl">
-                  <Link href="/budgeting">Atur budget</Link>
-                </Button>
+                <Link to="/settings" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors">
+                  Kelola dompet
+                </Link>
+                <Link to="/budgeting" className="inline-flex items-center justify-center rounded-xl border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent transition-colors">
+                  Atur budget
+                </Link>
               </div>
             </CardContent>
           </Card>
@@ -275,9 +261,9 @@ export default function DashboardPage() {
                     <p className="text-base font-semibold">Ringkasan dompet</p>
                     <p className="text-sm text-muted-foreground">Saldo terkini dari akun Anda</p>
                   </div>
-                  <Button asChild variant="outline" size="sm" className="rounded-xl">
-                    <Link href="/settings#wallets">Kelola</Link>
-                  </Button>
+                  <Link to="/settings" className="inline-flex items-center justify-center rounded-xl border border-input bg-background px-3 py-1.5 text-xs font-medium hover:bg-accent transition-colors">
+                    Kelola
+                  </Link>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {uiWallets.map((wallet) => (
