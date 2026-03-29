@@ -36,3 +36,4 @@ coverage/
 .run/
 .vercel
 tsconfig.tsbuildinfo
+.wrangler/
