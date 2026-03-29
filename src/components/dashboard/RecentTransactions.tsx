@@ -1,11 +1,9 @@
-"use client";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/providers";
 import { formatCurrency, formatShortDate } from "@/lib/utils";
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, type Transaction } from "@/types";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 const getCategoryInfo = (categoryId: string, type: "income" | "expense") => {
   const categories = type === "expense" ? EXPENSE_CATEGORIES : INCOME_CATEGORIES;
@@ -20,7 +18,7 @@ export function RecentTransactions({ transactions }: { transactions: Transaction
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-3">
         <CardTitle className="text-base">Transaksi terbaru</CardTitle>
-        <Link href="/transactions" className="text-xs text-primary hover:underline">Lihat semua</Link>
+        <Link to="/transactions" className="text-xs text-primary hover:underline">Lihat semua</Link>
       </CardHeader>
       <CardContent className="space-y-2">
         {recent.length === 0 ? (

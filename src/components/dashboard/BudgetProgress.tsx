@@ -1,11 +1,9 @@
-"use client";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/components/providers";
 import { formatCurrency } from "@/lib/utils";
 import { EXPENSE_CATEGORIES, type Budget } from "@/types";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 const getCategoryInfo = (id: string) =>
   EXPENSE_CATEGORIES.find((c) => c.id === id) || { label: id, icon: "📦", color: "#888" };
@@ -17,7 +15,7 @@ export function BudgetProgress({ budgets }: { budgets: Budget[] }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-3">
         <CardTitle className="text-base">Budget</CardTitle>
-        <Link href="/budgeting" className="text-xs text-primary hover:underline">Kelola</Link>
+        <Link to="/budgeting" className="text-xs text-primary hover:underline">Kelola</Link>
       </CardHeader>
       <CardContent className="space-y-3">
         {budgets.length === 0 ? (
