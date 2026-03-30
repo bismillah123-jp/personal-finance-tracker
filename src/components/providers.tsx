@@ -220,7 +220,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Timeout after 5 seconds — prevents infinite spinning on network/CORS issues
+    const timeoutId = setTimeout(() => {
+      console.warn("[Auth] getSession timed out — showing app anyway");
+      setLoading(false);
+    }, 5000);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      clearTimeout(timeoutId);
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -228,6 +235,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setLoading(false);
       }
+    }).catch((err) => {
+      clearTimeout(timeoutId);
+      console.error("[Auth] getSession error:", err);
+      setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
